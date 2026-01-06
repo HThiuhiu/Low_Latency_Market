@@ -1,3 +1,6 @@
+LOOKBACK = 100  
+FUTURE = 60
+
 def create_sequences_logreturn(scaled_data, close_raw, lookback=LOOKBACK, future_steps=FUTURE):
     X, y_logreturn = [], []
     close = np.asarray(close_raw, dtype=np.float32).flatten()

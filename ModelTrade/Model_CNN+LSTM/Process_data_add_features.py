@@ -1,7 +1,10 @@
-    def fetch_klines(symbol=SYMBOL, interval=INTERVAL, limit=LIMIT):
+import ccxt
+SYMBOL = "ETHUSDT"        
+INTERVAL = "5m"          
+LIMIT = 3000            
+
+def fetch_klines(symbol=SYMBOL, interval=INTERVAL, limit=LIMIT):
         exchange = ccxt.binance()
-        
-       
         duration_in_seconds = exchange.parse_timeframe(interval)
         duration_in_ms = duration_in_seconds * 1000
         
@@ -56,7 +59,7 @@
         return df
   
        # ---------- 1.2) Tạo các chỉ số kỹ thuật ----------
-    def add_features(data):
+def add_features(data):
         # 1. Chuyển đổi dữ liệu
         if isinstance(data, list):
             df = pd.DataFrame(data)
@@ -154,7 +157,7 @@
         return df
 
 
-    def compute_rsi(series, period=14):
+def compute_rsi(series, period=14):
         delta = series.diff()
         up = delta.clip(lower=0)
         down = -1 * delta.clip(upper=0)

@@ -1,3 +1,10 @@
+
+import torch
+import torch.nn as nn
+
+FUTURE = 60
+
+
 class CNN_LSTM_MultiHeadAttention(nn.Module):
     def __init__(self, input_features=14, hidden_dim=256, 
                  num_layers=3, output_steps=FUTURE, dropout_rate=0.2, num_heads=4):

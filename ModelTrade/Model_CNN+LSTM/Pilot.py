@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt 
+
 def plot_test_comparison2(test_actual, test_preds, title="So sánh Dự đoán và Thực tế (Chỉ tập Test)"):
     """
     Vẽ biểu đồ so sánh CHỈ giá trị thực tế và dự đoán của tập Test.

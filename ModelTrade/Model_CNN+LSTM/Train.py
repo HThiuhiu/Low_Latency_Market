@@ -1,3 +1,6 @@
+import pandas as pd
+import numpy as np
+
 def train_model(X_train, y_train, X_val, y_val, X_test, y_test, EPOCHS,test_data, test_one,test_with_history):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
