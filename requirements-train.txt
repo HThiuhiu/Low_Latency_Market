@@ -1,0 +1,7 @@
+-r requirements.txt
+# Training job only. For a CUDA build, install torch from the matching index, e.g.
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+torch>=2.3
+onnx>=1.16
+pandas>=2.0
+scipy>=1.11

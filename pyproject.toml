@@ -1,0 +1,39 @@
+[project]
+name = "qforecast"
+version = "0.1.0"
+description = "Low-latency, event-driven crypto forecasting microservices (CNN-BiLSTM-Attention, ONNX Runtime, Redis Streams)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[project.scripts]
+qf-ingestor = "qforecast.services.ingestor:main"
+qf-signal = "qforecast.services.signal:main"
+qf-analytics = "qforecast.services.analytics:main"
+qf-gateway = "qforecast.services.gateway:main"
+qf-recorder = "qforecast.services.recorder:main"
+qf-train = "qforecast.trainer.train:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["qforecast*"]
+
+[tool.setuptools.package-data]
+qforecast = ["services/static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E731"]

@@ -1,0 +1,107 @@
+{
+  "version": "8aec0742c42e",
+  "device": "cpu",
+  "days": 90,
+  "bars": 129600,
+  "samples": {
+    "train": 90486,
+    "val": 19342,
+    "test": 19402
+  },
+  "best_val_loss": 0.3712918162345886,
+  "onnx_max_abs_diff": 1.1920928955078125e-07,
+  "test_metrics": {
+    "1": {
+      "ic_spearman": 0.001188844752405724,
+      "hit_rate": 0.5057385362728875,
+      "r2_oos_vs_zero": -0.0058161234870059975,
+      "hit_rate_momentum_baseline": 0.5000800725991565,
+      "n": 19402
+    },
+    "5": {
+      "ic_spearman": 0.008884157416552399,
+      "hit_rate": 0.5109353187529083,
+      "r2_oos_vs_zero": -0.018850424897278284,
+      "hit_rate_momentum_baseline": 0.4842045395791324,
+      "n": 19402
+    },
+    "15": {
+      "ic_spearman": 0.02061457447340101,
+      "hit_rate": 0.5256205170545436,
+      "r2_oos_vs_zero": -0.019531368597263565,
+      "hit_rate_momentum_baseline": 0.46994168945766035,
+      "n": 19402
+    },
+    "30": {
+      "ic_spearman": -0.004777553419436851,
+      "hit_rate": 0.5110411722216489,
+      "r2_oos_vs_zero": -0.033657203715071304,
+      "hit_rate_momentum_baseline": 0.4717263440305438,
+      "n": 19402
+    },
+    "60": {
+      "ic_spearman": 0.00629577640841035,
+      "hit_rate": 0.5064734100170217,
+      "r2_oos_vs_zero": -0.045245981184201645,
+      "hit_rate_momentum_baseline": 0.47408056945375765,
+      "n": 19402
+    }
+  },
+  "strategy": [
+    {
+      "horizon": 1,
+      "trades": 0,
+      "periods": 19402,
+      "gross_return": 0.0,
+      "net_return": 0.0,
+      "gross_sharpe": 0.0,
+      "net_sharpe": 0.0,
+      "cost_bps_round_trip": 10.0,
+      "threshold_bps": 8.0
+    },
+    {
+      "horizon": 5,
+      "trades": 0,
+      "periods": 3881,
+      "gross_return": 0.0,
+      "net_return": 0.0,
+      "gross_sharpe": 0.0,
+      "net_sharpe": 0.0,
+      "cost_bps_round_trip": 10.0,
+      "threshold_bps": 8.0
+    },
+    {
+      "horizon": 15,
+      "trades": 10,
+      "periods": 1294,
+      "gross_return": -0.0003432255554969288,
+      "net_return": -0.010343225555496929,
+      "gross_sharpe": -0.32118188813473525,
+      "net_sharpe": -8.352266382535475,
+      "cost_bps_round_trip": 10.0,
+      "threshold_bps": 8.0
+    },
+    {
+      "horizon": 30,
+      "trades": 45,
+      "periods": 647,
+      "gross_return": -0.013461673479878478,
+      "net_return": -0.05846167347987848,
+      "gross_sharpe": -3.2475865816375187,
+      "net_sharpe": -13.187175914220639,
+      "cost_bps_round_trip": 10.0,
+      "threshold_bps": 8.0
+    },
+    {
+      "horizon": 60,
+      "trades": 44,
+      "periods": 324,
+      "gross_return": -0.010902149734298483,
+      "net_return": -0.054902149734298494,
+      "gross_sharpe": -2.411152821755686,
+      "net_sharpe": -11.5621260803571,
+      "cost_bps_round_trip": 10.0,
+      "threshold_bps": 8.0
+    }
+  ]
+}

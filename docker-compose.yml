@@ -1,0 +1,86 @@
+# Distributed deployment: one container per service, Redis Streams as the bus.
+#
+#   docker compose up -d --build                 # run the live system  -> http://localhost:8000
+#   docker compose --profile train run --rm trainer --days 90   # (re)train; signal hot-reloads
+#   docker compose --profile monitoring up -d    # + Prometheus on http://localhost:9090
+
+x-service: &service
+  build:
+    context: .
+    dockerfile: deploy/Dockerfile
+  image: qforecast:latest
+  restart: unless-stopped
+  environment: &env
+    QF_BUS_URL: redis://redis:6379/0
+    QF_SYMBOL: ${QF_SYMBOL:-ETHUSDT}
+    QF_INTERVAL: ${QF_INTERVAL:-1m}
+  depends_on:
+    redis:
+      condition: service_healthy
+
+services:
+  redis:
+    image: redis:7-alpine
+    # Pure in-memory bus: no fsync on the hot path. Streams are capped by MAXLEN.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  ingestor:
+    <<: *service
+    command: ["python", "-m", "qforecast.services.ingestor"]
+
+  signal:
+    <<: *service
+    command: ["python", "-m", "qforecast.services.signal"]
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+    # Latency-critical: give it a dedicated core (pick a P-core on hybrid CPUs).
+    # cpuset: "2"
+
+  analytics:
+    <<: *service
+    command: ["python", "-m", "qforecast.services.analytics"]
+
+  recorder:
+    <<: *service
+    command: ["python", "-m", "qforecast.services.recorder"]
+    environment:
+      <<: *env
+      QF_DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data
+
+  gateway:
+    <<: *service
+    command: ["python", "-m", "qforecast.services.gateway"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+
+  trainer:
+    profiles: ["train"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.trainer
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+    # GPU: uncomment and build with the CUDA torch index (see deploy/Dockerfile.trainer)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: 1, capabilities: [gpu] }]
+
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:latest
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"

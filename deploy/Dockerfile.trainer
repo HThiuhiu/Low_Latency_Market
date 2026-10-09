@@ -1,0 +1,16 @@
+# Training job image. CPU by default; for an NVIDIA GPU build with
+#   docker build -f deploy/Dockerfile.trainer --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu124 .
+# and run with `--gpus all` (the trainer picks CUDA + mixed precision automatically).
+FROM python:3.12-slim
+
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 NUMBA_CACHE_DIR=/tmp/numba-cache
+
+WORKDIR /app
+RUN pip install --no-cache-dir torch --index-url ${TORCH_INDEX}
+COPY requirements.txt requirements-train.txt ./
+RUN pip install --no-cache-dir -r requirements-train.txt
+
+COPY qforecast ./qforecast
+ENTRYPOINT ["python", "-m", "qforecast.trainer"]
+CMD ["--days", "90", "--epochs", "20"]
