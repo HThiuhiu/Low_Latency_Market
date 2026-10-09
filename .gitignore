@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+
+# downloaded market data (re-downloadable)
+data/
+
+# training artefacts: keep the exported model so the system runs without training
+artifacts/*.tmp
+benchmarks/traces/

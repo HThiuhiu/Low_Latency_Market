@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # The gateway aggregates every service's metrics (published on the ops.metrics topic).
+  - job_name: qforecast
+    static_configs:
+      - targets: ["gateway:8000"]

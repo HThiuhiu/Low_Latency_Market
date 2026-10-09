@@ -1,0 +1,13 @@
+# Runtime dependencies of the services (no torch: inference runs on ONNX Runtime).
+numpy>=2.0
+numba>=0.60
+onnxruntime>=1.18
+msgspec>=0.18
+orjson>=3.10
+redis>=5.0
+websockets>=13.0
+aiohttp>=3.9
+fastapi>=0.110
+uvicorn>=0.30
+psutil>=5.9
+zstandard>=0.22

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qforecast live</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1b1f24; --muted:#667085; --line:#e4e7ec;
+          --up:#12a150; --down:#d92d20; --flat:#667085; --accent:#2e6be6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1116; --card:#161b22; --fg:#e6edf3; --muted:#8b949e; --line:#30363d;
+            --up:#3fb950; --down:#f85149; --flat:#8b949e; --accent:#58a6ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:baseline; gap:16px; padding:16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; }
+  #status { color:var(--muted); font-size:12px; }
+  main { display:grid; gap:16px; padding:16px; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); max-width:1280px; margin:auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; min-width:0; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px; }
+  .big { font-size:32px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .badge { display:inline-block; padding:2px 10px; border-radius:999px; font-weight:600; font-size:13px; color:#fff; }
+  .LONG { background:var(--up); } .SHORT { background:var(--down); } .FLAT { background:var(--flat); }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  td, th { padding:6px 4px; border-bottom:1px solid var(--line); text-align:right; }
+  td:first-child, th:first-child { text-align:left; color:var(--muted); font-weight:normal; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  .pos { color:var(--up); } .neg { color:var(--down); }
+  canvas { width:100%; height:220px; display:block; }
+  .wide { grid-column:1 / -1; }
+</style>
+</head>
+<body>
+<header><h1>qforecast · <span id="sym">—</span></h1><span id="status">connecting…</span></header>
+<main>
+  <section class="card">
+    <h2>Signal</h2>
+    <div class="big" id="price">—</div>
+    <p><span class="badge FLAT" id="signal">—</span> <span id="sigdesc"></span></p>
+    <table><tbody id="lat"></tbody></table>
+  </section>
+  <section class="card">
+    <h2>Forecast by horizon</h2>
+    <table><thead><tr><th>Horizon</th><th>Exp. price</th><th>Exp. move</th><th>±1σ</th></tr></thead>
+      <tbody id="fc"></tbody></table>
+  </section>
+  <section class="card">
+    <h2>Market analysis</h2>
+    <table><tbody id="an"></tbody></table>
+  </section>
+  <section class="card wide">
+    <h2>Close &amp; forecast path</h2>
+    <canvas id="chart"></canvas>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 2) => Number(x).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+const bps = x => { const v = x * 1e4; return `<span class="${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : ''}${fmt(v, 1)} bps</span>`; };
+let history = [];
+
+function renderForecast(f) {
+  $('sym').textContent = f.symbol;
+  $('price').textContent = fmt(f.close);
+  const s = $('signal'); s.textContent = f.signal; s.className = 'badge ' + f.signal;
+  $('sigdesc').textContent = `${f.signal_horizon}-bar horizon · edge ${fmt(f.edge_bps, 1)} bps · model ${f.model_version}`;
+  $('fc').innerHTML = f.horizons.map((h, i) =>
+    `<tr><td>${h} bar${h > 1 ? 's' : ''}</td><td>${fmt(f.exp_price[i])}</td><td>${bps(f.exp_logret[i])}</td><td>${fmt(f.sigma[i] * 1e4, 1)} bps</td></tr>`).join('');
+  $('lat').innerHTML = [['Feature update', f.feature_us], ['Inference', f.infer_us], ['Exchange frame → forecast', f.pipeline_us]]
+    .map(([k, v]) => `<tr><td>${k}</td><td>${v ? fmt(v, 1) + ' µs' : '—'}</td></tr>`).join('');
+  if (!history.length || history[history.length - 1].bar_time !== f.bar_time) history.push(f);
+  history = history.slice(-240);
+  draw();
+}
+
+function renderAnalysis(a) {
+  const rows = [
+    ['Mid / microprice', `${fmt(a.mid)} / ${fmt(a.microprice)}`],
+    ['Spread', `${fmt(a.spread_bps, 2)} bps`],
+    ['Book imbalance (EWMA)', `${fmt(a.obi, 2)} (${fmt(a.obi_ewma, 2)})`],
+    ['Taker flow 1m / 5m', `${fmt(a.flow_imbalance_1m, 2)} / ${fmt(a.flow_imbalance_5m, 2)}`],
+    ['Trades / s (1m)', fmt(a.trade_rate_1m, 1)],
+    ['VWAP 5m', fmt(a.vwap_5m)],
+    ['Realised vol (ann.)', `${fmt(a.realized_vol_ann * 100, 1)}% · ${a.vol_regime}`],
+    ['Trend (efficiency ratio)', `${a.trend_regime} · ${fmt(a.efficiency_ratio, 2)}`],
+    ['RSI 14', `${fmt(a.rsi, 1)} · ${a.momentum_state}`],
+  ];
+  $('an').innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+}
+
+function draw() {
+  const c = $('chart'), dpr = devicePixelRatio || 1;
+  c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr;
+  const g = c.getContext('2d'); g.scale(dpr, dpr);
+  const W = c.clientWidth, H = c.clientHeight, css = getComputedStyle(document.documentElement);
+  if (!history.length) return;
+  const last = history[history.length - 1];
+  const closes = history.map(f => f.close);
+  const path = last.horizons.map((h, i) => [history.length - 1 + h, last.exp_price[i]]);
+  const xs = history.length - 1 + Math.max(...last.horizons);
+  const vals = closes.concat(path.map(p => p[1]));
+  const lo = Math.min(...vals), hi = Math.max(...vals), pad = (hi - lo) * 0.1 || 1;
+  const X = i => 8 + (W - 16) * i / Math.max(xs, 1), Y = v => H - 8 - (H - 16) * (v - lo + pad) / (hi - lo + 2 * pad);
+  g.lineWidth = 2; g.strokeStyle = css.getPropertyValue('--fg');
+  g.beginPath(); closes.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.stroke();
+  g.strokeStyle = css.getPropertyValue('--accent'); g.setLineDash([5, 4]);
+  g.beginPath(); g.moveTo(X(closes.length - 1), Y(last.close)); path.forEach(([i, v]) => g.lineTo(X(i), Y(v))); g.stroke();
+  g.setLineDash([]);
+}
+
+async function boot() {
+  try {
+    const h = await (await fetch('/v1/forecast/history?limit=240')).json();
+    h.forEach(renderForecast);
+  } catch (e) {}
+  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/v1/stream');
+  ws.onopen = () => $('status').textContent = 'live';
+  ws.onclose = () => { $('status').textContent = 'disconnected — retrying'; setTimeout(boot, 2000); };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type === 'forecast') renderForecast(m.data); else renderAnalysis(m.data);
+    $('status').textContent = 'live · ' + new Date().toLocaleTimeString();
+  };
+}
+addEventListener('resize', draw);
+boot();
+</script>
+</body>
+</html>
