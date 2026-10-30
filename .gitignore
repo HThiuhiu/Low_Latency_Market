@@ -18,3 +18,7 @@ artifacts/sim/
 # DeepSeek feature cache (raw LLM answers + embeddings) and run logs
 research/llm_cache/
 research/results/*.log
+
+# secrets (API keys) - never commit
+.env
+.env.*
