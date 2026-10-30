@@ -12,7 +12,7 @@ import asyncio
 import logging
 
 from qforecast.config import Settings
-from qforecast.services import analytics, gateway, ingestor, recorder, signal
+from qforecast.services import agent, analytics, gateway, ingestor, paper, recorder, signal
 from qforecast.services.base import apply_cpu_policy, bus_for, serve, setup_logging
 
 log = logging.getLogger("all")
@@ -38,7 +38,9 @@ async def supervise(name: str, fn, s: Settings, bus) -> None:
 
 async def main(s: Settings) -> None:
     async with bus_for(s) as bus:
-        services = dict(SERVICES, **({"recorder": recorder.run} if s.record else {}))
+        services = dict(SERVICES, **({"recorder": recorder.run} if s.record else {}),
+                        **({"paper": paper.run} if s.paper else {}),
+                        **({"agent": agent.run} if s.agent else {}))
         await asyncio.gather(*(supervise(name, fn, s, bus) for name, fn in services.items()))
 
 

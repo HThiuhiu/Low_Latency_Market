@@ -206,6 +206,28 @@ Các cấu hình hữu ích (biến môi trường):
 | `QF_BUS_URL` | `memory://` | `redis://host:6379/0` cho chế độ phân tán |
 | `QF_RECORD` | `0` | chạy thêm recorder trong chế độ một process |
 
+## Giả lập giao dịch (paper trading)
+
+Dùng model đã train (`artifacts/model.onnx`) để giao dịch giả. Không gửi lệnh thật.
+
+**Backtest trên dữ liệu lịch sử** (`qforecast/sim`):
+
+```bash
+python -m qforecast.sim                                  # mặc định: chỉ dữ liệu SAU ngày train (out-of-sample)
+python -m qforecast.sim --days 30 --stop-bps 40 --take-bps 80
+python -m qforecast.sim --start 2026-10-10 --end 2026-10-20 --horizon 15 --long-only
+```
+
+- Mỗi nến đóng: feature (cùng kernel numba) → ONNX → `decide_signal` → khớp lệnh ở giá **mở của nến sau** (không nhìn trước).
+- Giữ lệnh đúng `signal_horizon` nến; tín hiệu cùng chiều thì gia hạn, ngược chiều thì đảo lệnh; stop/take tùy chọn.
+- Phí `--fee-bps` mỗi chiều (mặc định 5) + trượt giá `--slippage-bps` (mặc định 1).
+- Kết quả: `artifacts/sim/summary.json`, `trades.csv`, `equity.csv`, `equity.png` (nếu có matplotlib).
+
+**Paper trading live**: service `paper` chạy kèm `python -m qforecast.services.all`
+(tắt bằng `QF_PAPER=0`; chạy riêng: `python -m qforecast.services.paper`). Trạng thái ở
+`GET /v1/paper` và kênh WebSocket (`type: "paper"`). Tham số: `QF_PAPER_CASH`, `QF_PAPER_FEE_BPS`,
+`QF_PAPER_SLIPPAGE_BPS`, `QF_PAPER_SIZE`, `QF_PAPER_STOP_BPS`, `QF_PAPER_TAKE_BPS`, `QF_PAPER_LONG_ONLY`.
+
 ## Chạy lại benchmark
 
 ```bash

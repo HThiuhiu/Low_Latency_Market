@@ -1,0 +1,167 @@
+{
+  "symbol": "ETHUSDT",
+  "interval": "1m",
+  "days": 365,
+  "horizons": [
+    15,
+    30,
+    60,
+    120,
+    240,
+    480,
+    1440
+  ],
+  "test_period": [
+    "2026-10-08",
+    "2026-10-30"
+  ],
+  "buy_hold_test_pct": -7.9380792694244695,
+  "results": [
+    {
+      "model": "shipped NN (tuned thr)",
+      "horizon": 15,
+      "threshold_bps": 6.68,
+      "long_only": false,
+      "val": {
+        "total_return_pct": 2.8742467701018404,
+        "trades": 35,
+        "win_rate_pct": 62.857142857142854,
+        "avg_trade_bps": 8.239332653706478,
+        "max_drawdown_pct": -2.786797412910578,
+        "sharpe_ann": 2.7109402650553824
+      },
+      "test": {
+        "total_return_pct": -0.7802999485640782,
+        "trades": 32,
+        "win_rate_pct": 43.75,
+        "avg_trade_bps": -2.261979776047308,
+        "max_drawdown_pct": -5.019863052277187,
+        "sharpe_ann": -0.48943724145601913
+      }
+    },
+    {
+      "model": "xgb-reg",
+      "horizon": 30,
+      "threshold_bps": 8.29,
+      "long_only": false,
+      "val": {
+        "total_return_pct": 7.121195504466038,
+        "trades": 25,
+        "win_rate_pct": 60.0,
+        "avg_trade_bps": 28.288527747487706,
+        "max_drawdown_pct": -3.7281770300092445,
+        "sharpe_ann": 4.97901790401945
+      },
+      "test": {
+        "total_return_pct": -4.835220456628797,
+        "trades": 29,
+        "win_rate_pct": 58.620689655172406,
+        "avg_trade_bps": -16.697889778780866,
+        "max_drawdown_pct": -6.573075414649593,
+        "sharpe_ann": -3.409683528912124
+      }
+    },
+    {
+      "model": "xgb-cls",
+      "horizon": 30,
+      "threshold_bps": 0.3,
+      "long_only": false,
+      "val": {
+        "total_return_pct": 3.103032415644269,
+        "trades": 45,
+        "win_rate_pct": 55.55555555555556,
+        "avg_trade_bps": 7.446482135096684,
+        "max_drawdown_pct": -6.961665671353103,
+        "sharpe_ann": 1.7514770964319462
+      },
+      "test": {
+        "total_return_pct": 6.034974767952628,
+        "trades": 54,
+        "win_rate_pct": 57.407407407407405,
+        "avg_trade_bps": 11.14978926529451,
+        "max_drawdown_pct": -6.236469496419515,
+        "sharpe_ann": 3.681263537947124
+      }
+    },
+    {
+      "model": "momentum",
+      "horizon": 240,
+      "threshold_bps": 146.41,
+      "long_only": true,
+      "val": {
+        "total_return_pct": 4.7685991848607,
+        "trades": 21,
+        "win_rate_pct": 66.66666666666666,
+        "avg_trade_bps": 22.673788397837583,
+        "max_drawdown_pct": -6.3405986666719105,
+        "sharpe_ann": 2.215371879848657
+      },
+      "test": {
+        "total_return_pct": -2.858530872094611,
+        "trades": 15,
+        "win_rate_pct": 40.0,
+        "avg_trade_bps": -18.238448315850132,
+        "max_drawdown_pct": -6.879555504094499,
+        "sharpe_ann": -2.0713440023156644
+      }
+    },
+    {
+      "model": "reversal",
+      "horizon": 1440,
+      "threshold_bps": 260.76,
+      "long_only": false,
+      "val": {
+        "total_return_pct": 13.880181945267168,
+        "trades": 16,
+        "win_rate_pct": 68.75,
+        "avg_trade_bps": 84.81894878643666,
+        "max_drawdown_pct": -9.029821629433336,
+        "sharpe_ann": 4.015507724936897
+      },
+      "test": {
+        "total_return_pct": 18.24305945777356,
+        "trades": 16,
+        "win_rate_pct": 68.75,
+        "avg_trade_bps": 107.02972940463434,
+        "max_drawdown_pct": -8.172322978542745,
+        "sharpe_ann": 6.302285117724633
+      }
+    }
+  ],
+  "ic_test": [
+    {
+      "model": "shipped NN",
+      "ic": [
+        0.0123,
+        0.0243,
+        0.016,
+        0.0157,
+        0.0233
+      ]
+    },
+    {
+      "model": "xgb-reg",
+      "ic": [
+        0.0423,
+        0.0291,
+        0.0391,
+        0.0353,
+        0.0048,
+        -0.0447,
+        -0.0708
+      ]
+    },
+    {
+      "model": "xgb-cls",
+      "ic": [
+        -0.0049,
+        0.0131,
+        -0.029,
+        0.0789,
+        0.0293,
+        -0.0079,
+        0.0686
+      ]
+    }
+  ]
+}

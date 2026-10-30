@@ -198,6 +198,28 @@ Useful settings (environment variables):
 | `QF_BUS_URL` | `memory://` | `redis://host:6379/0` for the distributed mode |
 | `QF_RECORD` | `0` | also run the recorder in single-process mode |
 
+## Paper trading simulation
+
+Trades the trained model (`artifacts/model.onnx`) on paper. No real orders are sent.
+
+**Historical backtest** (`qforecast/sim`):
+
+```bash
+python -m qforecast.sim                                  # default: only bars AFTER the model was trained
+python -m qforecast.sim --days 30 --stop-bps 40 --take-bps 80
+python -m qforecast.sim --start 2026-10-10 --end 2026-10-20 --horizon 15 --long-only
+```
+
+- Each closed bar: features (same numba kernel) → ONNX → `decide_signal` → filled at the **next bar's open** (no look-ahead).
+- Hold for `signal_horizon` bars; same-side signal extends, opposite signal reverses; optional stop/take.
+- Costs: `--fee-bps` per side (default 5) + `--slippage-bps` (default 1).
+- Output: `artifacts/sim/summary.json`, `trades.csv`, `equity.csv`, `equity.png` (if matplotlib is installed).
+
+**Live paper trading**: the `paper` service runs inside `python -m qforecast.services.all`
+(disable with `QF_PAPER=0`; standalone: `python -m qforecast.services.paper`). State at
+`GET /v1/paper` and on the WebSocket (`type: "paper"`). Settings: `QF_PAPER_CASH`, `QF_PAPER_FEE_BPS`,
+`QF_PAPER_SLIPPAGE_BPS`, `QF_PAPER_SIZE`, `QF_PAPER_STOP_BPS`, `QF_PAPER_TAKE_BPS`, `QF_PAPER_LONG_ONLY`.
+
 ## Reproducing the benchmarks
 
 ```bash
@@ -219,7 +241,8 @@ qforecast/
   exchange/   binance.py        concurrent REST backfill, resilient WebSocket, typed decoding
   storage/    columnar.py (QCOL), ticklog.py (tick capture)
   model/      net.py, predictor.py (ONNX Runtime, hot reload); ssm.py, scan_*.py (optional GPU experiment, not covered here)
-  services/   ingestor, signal, analytics, recorder, gateway, all (single process)
+  services/   ingestor, signal, analytics, recorder, paper, gateway, all (single process)
+  sim/        broker.py (paper broker), backtest.py (historical simulation with the ONNX model)
   trainer/    data, leak-free dataset, train, evaluate
 benchmarks/   reproducible benchmarks; generated reports: RESULTS.md, BEFORE_AFTER.md, HETERO.md
 tests/        pytest suite

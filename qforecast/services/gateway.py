@@ -39,6 +39,8 @@ class Hub:
         self.s, self.bus, self.reg = s, bus, reg
         self.forecast: bytes | None = None
         self.analysis: bytes | None = None
+        self.paper: bytes | None = None
+        self.agent: bytes | None = None
         self.forecast_history: deque[bytes] = deque(maxlen=500)
         self.services: dict[str, dict] = {}
         self.clients: set[asyncio.Queue] = set()
@@ -58,14 +60,25 @@ class Hub:
             self.forecast_history.append(self.forecast)
         for raw in await self.bus.history(s.t_analysis, 1):
             self.analysis = _json(decode_analysis(raw))
+        for raw in await self.bus.history(s.t_paper, 1):
+            self.paper = raw
+        for raw in await self.bus.history(s.t_agent, 1):
+            self.agent = raw
         h = self.reg.hist("gateway_fanout", "bus message -> queued to all ws clients")
-        async for topic, payload in self.bus.subscribe([s.t_forecast, s.t_analysis, OPS_TOPIC]):
+        topics = [s.t_forecast, s.t_analysis, s.t_paper, s.t_agent, OPS_TOPIC]
+        async for topic, payload in self.bus.subscribe(topics):
             t0 = time.perf_counter_ns()
             if topic == OPS_TOPIC:
                 snap = orjson.loads(payload)
                 self.services[snap["service"]] = snap
                 continue
-            if topic == s.t_forecast:
+            if topic == s.t_paper:  # already JSON
+                body = self.paper = payload
+                kind = b"paper"
+            elif topic == s.t_agent:
+                body = self.agent = payload
+                kind = b"agent"
+            elif topic == s.t_forecast:
                 body = _json(decode_forecast(payload))
                 self.forecast = body
                 self.forecast_history.append(body)
@@ -120,6 +133,14 @@ def create_app(s: Settings, bus: Bus, reg: Registry | None = None) -> FastAPI:
         f = hub.forecast or b"null"
         a = hub.analysis or b"null"
         return Response(b'{"forecast":' + f + b',"analysis":' + a + b"}", media_type="application/json")
+
+    @app.get("/v1/paper")
+    async def paper():
+        return raw_json(hub.paper)
+
+    @app.get("/v1/agent")
+    async def agent():
+        return raw_json(hub.agent)
 
     @app.get("/v1/ops")
     async def ops():
