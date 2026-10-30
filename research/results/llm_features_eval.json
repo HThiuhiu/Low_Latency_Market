@@ -1,0 +1,51 @@
+{
+  "raw LLM bias*conf": {
+    "ic": 0.012958757149289592,
+    "hit": 0.469,
+    "trades": 98,
+    "net_bps_total": -581.2,
+    "avg_net_bps": -5.93
+  },
+  "raw LLM expected_move": {
+    "ic": -0.005345660682852139,
+    "hit": 0.52,
+    "trades": 98,
+    "net_bps_total": -830.5,
+    "avg_net_bps": -8.47
+  },
+  "raw NN 60-bar forecast": {
+    "ic": 0.00741956111083628,
+    "hit": 0.52,
+    "trades": 127,
+    "net_bps_total": -1277.8,
+    "avg_net_bps": -10.06
+  },
+  "base (features + NN)": {
+    "ic": -0.08671148268463706,
+    "hit": 0.433,
+    "trades": 120,
+    "net_bps_total": -1647.6,
+    "avg_net_bps": -13.73
+  },
+  "base + LLM scores": {
+    "ic": -0.11536780832082848,
+    "hit": 0.429,
+    "trades": 126,
+    "net_bps_total": -2141.4,
+    "avg_net_bps": -17.0
+  },
+  "base + LLM scores + emb": {
+    "ic": -0.1097658060745309,
+    "hit": 0.458,
+    "trades": 118,
+    "net_bps_total": -1475.1,
+    "avg_net_bps": -12.5
+  },
+  "LLM scores + emb only": {
+    "ic": -0.04545958405018809,
+    "hit": 0.463,
+    "trades": 82,
+    "net_bps_total": -821.8,
+    "avg_net_bps": -10.02
+  }
+}

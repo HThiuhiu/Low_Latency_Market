@@ -36,6 +36,28 @@ class Settings:
     # Minimum |expected move| in bps before the signal leaves FLAT (≈ round-trip taker fee).
     signal_threshold_bps: float = 8.0
 
+    # Paper trading (live simulation of the model's signals, see qforecast/sim)
+    paper: bool = True
+    paper_cash: float = 10_000.0
+    paper_fee_bps: float = 5.0  # per side
+    paper_slippage_bps: float = 1.0
+    paper_size: float = 1.0  # notional / equity
+    paper_stop_bps: float = 0.0  # 0 = disabled
+    paper_take_bps: float = 0.0
+    paper_long_only: bool = False
+
+    # Trading agent: model signal -> LLM advice (DeepSeek, env DEEPSEEK_*) -> risk rules. Paper only.
+    agent: bool = False  # QF_AGENT=1 to run it in services.all (each call costs API tokens)
+    agent_model: str = ""  # empty = DEEPSEEK_MODEL
+    agent_mode: str = "veto"  # veto | free
+    agent_min_conf: float = 0.6
+    agent_max_size: float = 1.0
+    agent_daily_loss_pct: float = 3.0
+    agent_cooldown_bars: int = 5
+    agent_review_bars: int = 15
+    agent_max_calls_hour: int = 30
+    agent_timeout_s: float = 30.0
+
     # Bus
     stream_maxlen: int = 20_000
     kline_stream_maxlen: int = 5_000
@@ -103,6 +125,14 @@ class Settings:
     @property
     def t_analysis(self) -> str:
         return f"ana.market.{self.sym}"
+
+    @property
+    def t_paper(self) -> str:
+        return f"sim.paper.{self.sym}"
+
+    @property
+    def t_agent(self) -> str:
+        return f"sim.agent.{self.sym}"
 
     @property
     def model_path(self) -> Path:

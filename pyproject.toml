@@ -13,6 +13,8 @@ qf-analytics = "qforecast.services.analytics:main"
 qf-gateway = "qforecast.services.gateway:main"
 qf-recorder = "qforecast.services.recorder:main"
 qf-train = "qforecast.trainer.train:main"
+qf-paper = "qforecast.services.paper:main"
+qf-sim = "qforecast.sim.backtest:main"
 
 [build-system]
 requires = ["setuptools>=68"]

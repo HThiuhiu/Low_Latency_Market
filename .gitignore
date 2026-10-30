@@ -11,3 +11,14 @@ data/
 # training artefacts: keep the exported model so the system runs without training
 artifacts/*.tmp
 benchmarks/traces/
+
+# paper-trading simulation output
+artifacts/sim/
+
+# DeepSeek feature cache (raw LLM answers + embeddings) and run logs
+research/llm_cache/
+research/results/*.log
+
+# secrets (API keys) - never commit
+.env
+.env.*
