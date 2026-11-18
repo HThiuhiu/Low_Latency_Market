@@ -38,6 +38,9 @@ class SwingSpec:
     gross: float = 1.0
     short_cap: float = 0.0  # LS: cap of one coin in the short leg (0 = same as cap)
     short_stop: float = 0.0  # LS: close a short after it rose this much since its rebalance (0 = off)
+    n_short: int = 0  # LS: names in the short leg (0 = same as n)
+    skip_neg_funding: bool = False  # LS: skip a short candidate whose 7-day funding is negative, take the next-ranked name
+    thin_leg_btc: bool = False  # LS + beta hedge: a leg with < 4 names keeps the fixed cap, the net beta goes to a BTC perp
 
     @classmethod
     def load(cls, path) -> SwingSpec:
@@ -93,12 +96,16 @@ def book_targets(ctx: Context, spec: SwingSpec, rebal: np.ndarray, s: np.ndarray
     b = cube.bench
     s = score(ctx, spec) if s is None else s
     vol = ctx.vol if spec.weighting == "invvol" else np.where(np.isfinite(ctx.vol), 1.0, np.nan)
-    tr = B.tranche_targets(s, ctx.mask, vol, rebal, spec.mode, n=spec.n, cap=spec.cap, short_cap=spec.short_cap or None)
+    skip = (ctx.f7 < 0) if (spec.mode == "LS" and spec.skip_neg_funding and ctx.f7 is not None) else None
+    tr = B.tranche_targets(s, ctx.mask, vol, rebal, spec.mode, n=spec.n, cap=spec.cap, short_cap=spec.short_cap or None,
+                           n_short=spec.n_short or None, skip_short=skip, fixed_cap=spec.thin_leg_btc)
     if spec.mode == "LS" and spec.hedge == "beta":  # scale each tranche's legs so long beta = short beta, gross kept
         for k in rebal:
             w = tr[k]
             lb, sb = float(np.clip(w, 0, None) @ ctx.beta[k]), float(-np.clip(w, None, 0) @ ctx.beta[k])
-            if lb > 0 and sb > 0:
+            if spec.thin_leg_btc and (int((w > 0).sum()) < 4 or int((w < 0).sum()) < 4):
+                tr[k, b] += -(lb - sb)  # thin leg: no scaling up, a BTC perp carries the net beta
+            elif lb > 0 and sb > 0:
                 a = 2 * sb / (lb + sb)
                 tr[k] = np.where(w > 0, w * a, w * (2 - a))
     w = B.overlap(tr, rebal, spec.H, spec.every) * spec.gross
