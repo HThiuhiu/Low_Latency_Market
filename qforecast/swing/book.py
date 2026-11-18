@@ -23,11 +23,27 @@ def leg_weights(x: np.ndarray, cap: float = 0.25) -> np.ndarray:
     return w
 
 
+def fixed_cap_weights(x: np.ndarray, cap: float = 0.25) -> np.ndarray:
+    """Like leg_weights but the cap is never relaxed: with fewer than 1 / cap names every name sits at the cap and
+    the leg is smaller than 1 (a thin leg must not be concentrated in a few coins)."""
+    if len(x) * cap <= 1.0 + 1e-12:
+        return np.full(len(x), cap)
+    w = x / x.sum()
+    for _ in range(50):
+        w = np.minimum(w, cap)
+        w = w / w.sum()
+    return w
+
+
 def tranche_targets(score: np.ndarray, mask: np.ndarray, vol: np.ndarray, rebal: np.ndarray, mode: str, n: int = 8,
-                    cap: float = 0.25, short_cap: float | None = None) -> np.ndarray:
+                    cap: float = 0.25, short_cap: float | None = None, n_short: int | None = None,
+                    skip_short: np.ndarray | None = None, fixed_cap: bool = False) -> np.ndarray:
     """Target weights of the tranche formed at each rebalance row (other rows 0).
     LS: long top n / short bottom n, ~1/vol, 0.5 gross per leg. LO: long top n, ~1/vol, gross 1. EW: all members, 1/n.
-    ``short_cap``: cap for the short leg (default = ``cap``)."""
+    ``short_cap``: cap for the short leg (default = ``cap``).
+    ``n_short`` (LS): names in the short leg (default = ``n``). ``skip_short`` (T, N) bool (LS): a short candidate
+    flagged here is skipped and the next-ranked name takes its place (search down to 2 x n_short ranks).
+    ``fixed_cap`` (LS): legs use fixed_cap_weights (a leg with fewer than 1 / cap names is not scaled up)."""
     T, N = score.shape
     out = np.zeros((T, N))
     for k in rebal:
@@ -38,17 +54,23 @@ def tranche_targets(score: np.ndarray, mask: np.ndarray, vol: np.ndarray, rebal:
             if len(idx):
                 out[k, idx] = 1.0 / len(idx)
             continue
-        nn = ns = n
+        nn = n
+        ns = n if (n_short is None or mode != "LS") else int(n_short)
         if len(idx) < nn + ns:  # small cross-section: split what is there, at least 2 per leg
             nn = ns = len(idx) // 2
             if nn < 2:
                 continue
         order = idx[np.argsort(score[k, idx], kind="mergesort")]
         top = order[-nn:]
-        out[k, top] = leg_weights(1.0 / vol[k, top], cap) * (0.5 if mode == "LS" else 1.0)
+        lw = fixed_cap_weights if (fixed_cap and mode == "LS") else leg_weights
+        out[k, top] = lw(1.0 / vol[k, top], cap) * (0.5 if mode == "LS" else 1.0)
         if mode == "LS":
             bot = order[:ns]
-            out[k, bot] = -leg_weights(1.0 / vol[k, bot], cap if short_cap is None else short_cap) * 0.5
+            if skip_short is not None:
+                pool = order[:min(2 * ns, len(order) - nn)]
+                bot = pool[~skip_short[k, pool]][:ns]
+            if len(bot):
+                out[k, bot] = -lw(1.0 / vol[k, bot], cap if short_cap is None else short_cap) * 0.5
     return out
 
 
