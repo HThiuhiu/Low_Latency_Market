@@ -1,7 +1,8 @@
 # ruff: noqa: E501
 """Exchange-style backtest of a swing spec on the daily cube: an account in USDT, real order sizes, fees, funding.
 
-    python -m qforecast.swing.backtest --spec <spec.json> --start 2025-01-01 --capital 1000 [--gross 2] [--exchange-minimum]
+    python -m qforecast.swing.backtest --start 2025-01-01 --capital 1000 [--gross 2] [--exchange-minimum]   # C5 by default
+    python -m qforecast.swing.backtest --spec <other spec.json> ...                                       # any other spec
 
 Decision code = qforecast.swing.strategy.book_targets (the same function the research tools score). Every day:
 targets at the close of day k, trade at open[k+1] on a PaperBook (flat cost per side, minimum order, optional exchange
@@ -191,7 +192,7 @@ def run(ctx: Context, spec: SwingSpec, capital: float = 1000.0, gross: float = 1
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--spec", required=True)
+    ap.add_argument("--spec", default="artifacts/models/c5.json")
     ap.add_argument("--cube", default=CUBE)
     ap.add_argument("--start")
     ap.add_argument("--end")

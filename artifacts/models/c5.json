@@ -1,0 +1,32 @@
+{
+ "name": "C5",
+ "kind": "daily cross-sectional long/short swing book, Binance USDT-M perps",
+ "universe": "top-40 USDT perps by 30-day quote volume, re-ranked on the first day of each month, delisted coins included (python -m qforecast.swing.data)",
+ "signals": "6 signals of qforecast/swing/signals.py, cross-sectional normal scores, fixed weights below (L1-normalised)",
+ "book": "every day 1 / 7 of the book is re-picked (7 staggered weekly sub-books). Each sub-book: 0.5 gross long the top 5, 0.5 gross short 8 names from the bottom of the ranking, skipping any short candidate whose 7-day mean funding is negative (shorts there already pay; crowded short, squeeze risk) and taking the next-ranked name, searching down to rank 16. Inverse 28-day-vol legs, 25 % cap per coin; legs scaled to equal beta to BTC; if fewer than 4 shorts are eligible the leg keeps 12.5 % of gross per name and a BTC perp short carries the missing beta. A short whose daily close reaches 1.4 x its entry is bought back and left out until its sub-book re-picks.",
+ "costs": "7 bps per side all-in + real funding",
+ "params": {
+  "mode": "LS",
+  "H": 7,
+  "every": 7,
+  "n": 5,
+  "n_short": 8,
+  "cap": 0.25,
+  "short_cap": 0.25,
+  "weights": {
+   "vol_28d": -0.08333333333333333,
+   "beta_90d": -0.08333333333333333,
+   "max_7d": -0.08333333333333333,
+   "funding_7d": -0.25,
+   "near_high_90d": 0.25,
+   "flow_res_7d": 0.25
+  },
+  "weighting": "invvol",
+  "hedge": "beta",
+  "vol_target": 0.0,
+  "short_stop": 0.4,
+  "gross": 1.0,
+  "skip_neg_funding": true,
+  "thin_leg_btc": true
+ }
+}
