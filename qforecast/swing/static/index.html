@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C5 Paper Book</title>
+<style>
+:root { --bg:#f7f7f5; --card:#fff; --ink:#1d1d1b; --mute:#6b6b66; --line:#e4e3de; --up:#1a7f4b; --down:#b3261e; --accent:#2f5fd0; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151514; --card:#1f1f1d; --ink:#ecebe6; --mute:#9a9992; --line:#33332f; --up:#4cc38a; --down:#f2726a; --accent:#7ea2ff; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width:1100px; margin:0 auto; padding:20px 16px 48px; }
+h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:15px; margin:0 0 10px; }
+.sub { color:var(--mute); margin:0 0 18px; }
+.grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); margin-bottom:12px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:12px; overflow-x:auto; }
+.book { cursor:pointer; } .book.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.k { color:var(--mute); font-size:12px; } .v { font-size:20px; font-variant-numeric:tabular-nums; }
+.row { display:flex; gap:18px; flex-wrap:wrap; }
+.up { color:var(--up); } .down { color:var(--down); }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th { color:var(--mute); font-weight:500; font-size:12px; } td.num, th.num { text-align:right; }
+button { background:var(--accent); color:#fff; border:0; border-radius:7px; padding:7px 12px; font:inherit; cursor:pointer; }
+button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+input { background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:5px 7px; font:inherit; width:120px; }
+canvas { width:100%; height:220px; display:block; }
+.note { color:var(--mute); font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>C5 paper books</h1>
+  <p class="sub">Virtual accounts on Binance mainnet prices. No real money. Daily step ~00:05 UTC.</p>
+  <div class="grid" id="books"></div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h2 id="title">Book</h2>
+      <div class="row" style="gap:8px"><button class="ghost" onclick="run('plan')">Plan now</button><button onclick="run('step')">Run daily step</button></div>
+    </div>
+    <div class="row" id="kpi"></div>
+    <div class="note" id="job"></div>
+  </div>
+
+  <div class="card"><h2>Equity</h2><canvas id="eq"></canvas></div>
+  <div class="card"><h2>Today's picks</h2><table id="picks"></table><div class="note" id="weights"></div></div>
+  <div class="card"><h2>Open positions</h2><table id="pos"></table></div>
+  <div class="card"><h2>Daily P&amp;L</h2><table id="daily"></table></div>
+
+  <div class="card">
+    <h2>Backtest C5 on the daily cube</h2>
+    <div class="row" style="align-items:center;gap:10px">
+      <label>Start <input id="bt-start" value="2025-01-01"></label>
+      <label>Capital <input id="bt-cap" value="1000"></label>
+      <label>Gross <input id="bt-gross" value="1"></label>
+      <button onclick="backtest()">Run</button>
+    </div>
+    <div class="row" id="bt-kpi" style="margin-top:10px"></div>
+    <canvas id="bt-eq"></canvas>
+    <div class="note">The signal weights were chosen on this same history: a backtest here is in-sample and overstates what to expect.</div>
+  </div>
+</main>
+<script>
+let book = "c5";
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 2) => x == null ? "–" : Number(x).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+const pct = x => x == null ? "–" : `<span class="${x >= 0 ? "up" : "down"}">${x >= 0 ? "+" : ""}${fmt(x)} %</span>`;
+const kv = (k, v) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
+const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;"}[c]));
+async function get(u) { const r = await fetch(u); return r.json(); }
+async function post(u, b) { const r = await fetch(u, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b)}); return r.json(); }
+
+function line(canvas, pts) {
+  const c = $(canvas), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  if (pts.length < 2) { g.fillStyle = getComputedStyle(document.body).color; g.fillText("not enough data yet", 8, 20); return; }
+  const ys = pts.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), pad = 28;
+  const X = i => pad + (w - pad - 8) * i / (pts.length - 1), Y = v => h - 18 - (h - 30) * (v - lo) / ((hi - lo) || 1);
+  const css = getComputedStyle(document.documentElement);
+  g.strokeStyle = css.getPropertyValue("--line"); g.beginPath(); g.moveTo(pad, Y(pts[0][1])); g.lineTo(w - 8, Y(pts[0][1])); g.stroke();
+  g.strokeStyle = css.getPropertyValue("--accent"); g.lineWidth = 2; g.beginPath();
+  pts.forEach((p, i) => i ? g.lineTo(X(i), Y(p[1])) : g.moveTo(X(i), Y(p[1]))); g.stroke();
+  g.fillStyle = css.getPropertyValue("--mute"); g.font = "11px system-ui";
+  g.fillText(fmt(hi, 0), 2, 12); g.fillText(fmt(lo, 0), 2, h - 20); g.fillText(pts[0][0], pad, h - 4);
+  const last = pts[pts.length - 1][0]; g.fillText(last, w - 8 - g.measureText(last).width, h - 4);
+}
+
+async function loadBooks() {
+  const rows = await get("/api/books");
+  $("books").innerHTML = rows.map(b => `<div class="card book ${b.key === book ? "sel" : ""}" onclick="pick('${b.key}')">
+    <div class="k">${esc(b.label)}${b.enabled ? "" : " · off"}</div>
+    <div class="row" style="margin-top:6px">${kv("Equity", fmt(b.equity))}${kv("P&L", pct(b.pnl_pct))}${kv("Max DD", pct(b.maxdd_pct))}${kv("Days", b.days ?? 0)}</div>
+    ${b.error ? `<div class="note">${esc(b.error)}</div>` : ""}</div>`).join("");
+}
+
+async function loadBook() {
+  const s = await get(`/api/stats?book=${book}`);
+  $("title").textContent = book === "c5" ? "C5" : "C5 + adaptive weights";
+  $("kpi").innerHTML = kv("Equity", fmt(s.equity)) + kv("P&L", pct(s.pnl?.total_pct)) + kv("Fees", fmt(s.pnl?.fees)) + kv("Funding", fmt(s.pnl?.funding))
+    + kv("Sharpe", s.sharpe == null ? "–" : fmt(s.sharpe)) + kv("Closed trades", s.trades?.closed ?? 0) + kv("Since", esc((s.started || "–").slice(0, 10)));
+  const daily = (s.daily || []).slice().reverse();
+  line("eq", [[(s.started || "").slice(5, 10), s.start_equity], ...daily.map(d => [d.day.slice(5), d.equity])]);
+  $("picks").innerHTML = "<tr><th>Coin</th><th>Side</th><th class=num>Rank</th><th class=num>Weight</th><th class=num>Target USDT</th><th>Why</th></tr>"
+    + (s.picks || []).map(p => `<tr><td>${esc(p.symbol)}</td><td class="${p.side === "LONG" ? "up" : "down"}">${p.side}${p.blocked ? " (guard)" : ""}</td>
+      <td class=num>${p.rank ?? "–"} / ${p.of}</td><td class=num>${fmt(p.weight * 100, 1)} %</td><td class=num>${fmt(p.target_usdt)}</td><td>${esc(p.why)}</td></tr>`).join("");
+  const w = s.weights || {};
+  $("weights").textContent = Object.keys(w).length ? "Signal weights: " + Object.entries(w).map(([k, v]) => `${k} ${v >= 0 ? "+" : ""}${v.toFixed(3)}`).join(" · ") : "";
+  $("pos").innerHTML = "<tr><th>Coin</th><th class=num>Qty</th><th class=num>Entry</th><th class=num>Mark</th><th class=num>Notional</th><th class=num>Unrealised</th></tr>"
+    + (s.positions || []).map(p => `<tr><td>${esc(p.symbol)}</td><td class=num>${fmt(p.qty, 4)}</td><td class=num>${fmt(p.entry, 5)}</td><td class=num>${fmt(p.mark, 5)}</td>
+      <td class=num>${fmt(p.notional)}</td><td class="num ${p.upnl >= 0 ? "up" : "down"}">${fmt(p.upnl)}</td></tr>`).join("");
+  $("daily").innerHTML = "<tr><th>Day</th><th class=num>Equity</th><th class=num>P&amp;L</th><th class=num>BTC</th></tr>"
+    + (s.daily || []).slice(0, 30).map(d => `<tr><td>${d.day}</td><td class=num>${fmt(d.equity)}</td><td class=num>${pct(d.pnl_pct)}</td><td class=num>${pct(d.btc_pct)}</td></tr>`).join("");
+}
+
+async function pick(k) { book = k; await loadBooks(); await loadBook(); }
+
+async function run(kind) {
+  const r = await post("/api/run", {book, kind});
+  if (!r.started) { $("job").textContent = r.error || "not started"; return; }
+  const t = setInterval(async () => {
+    const st = await get(`/api/job?book=${book}`), j = st.job || {};
+    $("job").textContent = j.running ? `${j.kind}: ${j.stage}` : (j.result?.error ? `error: ${j.result.error}` : `${j.kind} done ${j.finished || ""}`);
+    if (!j.running) { clearInterval(t); loadBooks(); loadBook(); }
+  }, 2000);
+}
+
+async function backtest() {
+  await post("/api/backtest", {start: $("bt-start").value, capital: +$("bt-cap").value, gross: +$("bt-gross").value});
+  $("bt-kpi").textContent = "running…";
+  const t = setInterval(async () => {
+    const j = await get("/api/backtest/job");
+    if (j.running) return;
+    clearInterval(t);
+    if (j.error) { $("bt-kpi").textContent = j.error; return; }
+    const s = j.result.summary;
+    $("bt-kpi").innerHTML = kv("Return", pct(s.return_pct)) + kv("Sharpe", fmt(s.sharpe)) + kv("Max DD", pct(s.max_drawdown_pct))
+      + kv("Fees", fmt(s.fees_usdt)) + kv("Funding", fmt(s.funding_usdt)) + kv("BTC hold", pct(s.btc_hold_pct));
+    line("bt-eq", j.result.equity.map(e => [e.t, e.equity]));
+  }, 1500);
+}
+
+loadBooks().then(loadBook);
+setInterval(loadBooks, 60000);
+</script>
+</body>
+</html>

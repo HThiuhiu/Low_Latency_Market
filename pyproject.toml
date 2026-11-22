@@ -1,7 +1,7 @@
 [project]
 name = "qforecast"
 version = "0.1.0"
-description = "Low-latency, event-driven crypto forecasting microservices (CNN-BiLSTM-Attention, ONNX Runtime, Redis Streams)"
+description = "Daily cross-sectional crypto trading simulator and research toolkit (C5 strategy, adaptive signal weights, paper bot); plus the original low-latency forecasting pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -15,6 +15,11 @@ qf-recorder = "qforecast.services.recorder:main"
 qf-train = "qforecast.trainer.train:main"
 qf-paper = "qforecast.services.paper:main"
 qf-sim = "qforecast.sim.backtest:main"
+qf-cube = "qforecast.swing.data:main"
+qf-backtest = "qforecast.swing.backtest:main"
+qf-paper-c5 = "qforecast.swing.paper:main"
+qf-dashboard = "qforecast.swing.dashboard:main"
+qf-adaptive = "qforecast.adaptive.weights:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -24,7 +29,7 @@ build-backend = "setuptools.build_meta"
 include = ["qforecast*"]
 
 [tool.setuptools.package-data]
-qforecast = ["services/static/*.html"]
+qforecast = ["services/static/*.html", "swing/static/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
