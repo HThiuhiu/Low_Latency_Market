@@ -2,10 +2,9 @@
 """Adaptive signal weights: every day, the weight set with the best mean / std of daily P&L over the last 30 days,
 searched over the whole weight space (covering pool + local refinement, qforecast.adaptive.search).
 
-    python -m qforecast.adaptive.weights --from 2026-11-20 --to 2026-11-25               # C5
-
-Every weight set runs through the reference book (qforecast.adaptive.search.NumpyBook), one after the other: exact,
-but slow, so the covering pool stays small.
+    python -m qforecast.adaptive.weights --from 2026-11-20 --to 2026-11-25               # C5, batched engine on CPU
+    QF_DEV=cuda python -m qforecast.adaptive.weights --from 2025-01-01 --to 2025-12-31   # long ranges: use a GPU
+    python -m qforecast.adaptive.weights --from 2026-11-25 --to 2026-11-25 --backend numpy   # reference evaluator
 
 Timing (no look-ahead): the weights of signal row t are traded at the open of t + 1. They use the P&L of columns
 t-31 .. t-2 only: column t-1 earns open[t] -> open[t + 1], which is not known yet at that open. A day already in
@@ -18,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -42,15 +42,26 @@ def base_weights(spec, signals=S.SIGNALS) -> np.ndarray:
     return S.nrm([float(spec.weights.get(s, 0.0)) for s in signals])[0]
 
 
-def compute(ctx, spec, start: str, end: str, seed: int | None = None, window: int = WINDOW, warm_days: int = WARM_DAYS,
-            n_pool: int = S.NPOOL, top: int = 16, kids: int = 31) -> tuple[dict[str, np.ndarray], dict]:
+def compute(ctx, spec, start: str, end: str, seed: int | None = None, dev: str | None = None,
+            window: int = WINDOW, warm_days: int = WARM_DAYS, n_pool: int | None = None, backend: str = "torch",
+            top: int = 16, kids: int = 31) -> tuple[dict[str, np.ndarray], dict]:
     """{day: (F,) weights} for signal-row days start .. end (inclusive), and the refinement summary.
-    ``n_pool``: draws per half of the covering pool. ``top`` / ``kids``: refinement size."""
+    ``backend``: "torch" (batched engine, float32, ``dev`` / QF_DEV) or "numpy" (reference, one book run per set).
+    ``n_pool``: draws per half of the covering pool (default: the backend's size). ``top`` / ``kids``: refinement size."""
+    dev = dev or os.environ.get("QF_DEV", "cpu")
+    if n_pool is None:
+        n_pool = S.NPOOL if backend == "torch" else S.NPOOL_REFERENCE
     d0 = datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=UTC)
     warm = (d0 - timedelta(days=warm_days)).strftime("%Y-%m-%d")
     end_excl = (datetime.strptime(end, "%Y-%m-%d").replace(tzinfo=UTC) + timedelta(days=1)).strftime("%Y-%m-%d")
     t = ctx.cube.t
-    p = S.NumpyBook(ctx, spec, int(np.searchsorted(t, _ms(warm))), int(np.searchsorted(t, _ms(end_excl))))
+    kA, kS = int(np.searchsorted(t, _ms(warm))), int(np.searchsorted(t, _ms(end_excl)))
+    if backend == "torch":
+        from qforecast.adaptive.engine import TorchBook
+
+        p = TorchBook(ctx, spec, kA, kS, dev=dev)
+    else:
+        p = S.NumpyBook(ctx, spec, kA, kS)
     rowday = [_day(v) for v in p.t]
     assert rowday[-1] == end, f"cube has no row {end} (last {rowday[-1]})"
     rows = [i for i in range(p.D) if rowday[i] >= start]
@@ -104,13 +115,17 @@ def main() -> None:
     ap.add_argument("--cube", default="data/um/cube_daily_top40.npz")
     ap.add_argument("--cache", default=str(CACHE))
     ap.add_argument("--seed", type=int)
+    ap.add_argument("--backend", choices=("torch", "numpy"), default="torch")
     a = ap.parse_args()
+    import torch
+
     from qforecast.swing.cube import Cube
     from qforecast.swing.strategy import Context, SwingSpec
 
+    torch.set_num_threads(int(os.environ.get("QF_THREADS", "4")))
     t0 = time.time()
     ctx = Context.build(Cube.load(Path(a.cube)))
-    out, gap = compute(ctx, SwingSpec.load(a.spec), a.start, a.end, a.seed)
+    out, gap = compute(ctx, SwingSpec.load(a.spec), a.start, a.end, a.seed, backend=a.backend)
     save_days(out, gap, a.start, a.end, Path(a.cache), time.time() - t0)
     for d, w in out.items():
         print(d, " ".join(f"{s}={x:+.3f}" for s, x in zip(S.SIGNALS, w, strict=True)))

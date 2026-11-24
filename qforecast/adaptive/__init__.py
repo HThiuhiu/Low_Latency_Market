@@ -1,2 +1,2 @@
-"""Adaptive signal weights for the swing book: a search of the weight space (covering pool + local
-refinement) and the daily weights it produces."""
+"""Adaptive signal weights for the swing book: a batched torch engine that runs many weight sets at
+once, a covering-pool + local-refinement search of the weight space, and the daily weights."""

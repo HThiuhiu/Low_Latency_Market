@@ -7,8 +7,10 @@ trailing L-day window scores come from cumulative sums of the daily P&L.
 Stage 2 (local refinement): for each day, the best pool sets by return and by mean / std are perturbed in two
 rounds and re-scored on that day's window only.
 
-The evaluator is the reference book: every weight set runs through qforecast.swing.strategy.run_staggered, one
-after the other. It is exact and simple, and slow: the pool has to stay small.
+Two evaluators share one interface (``evaluate(W, kA, kS)`` -> daily P&L of every set):
+    NumpyBook                          the reference: one qforecast.swing.strategy.run_staggered call per set (slow, exact)
+    qforecast.adaptive.engine.TorchBook  the whole batch of sets at once in torch, CPU or GPU (same P&L, much faster)
+With the batched engine the pool can be large enough to cover the whole weight space every day.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import numpy as np
 import torch
 
 SIGNALS = ("vol_28d", "beta_90d", "max_7d", "funding_7d", "near_high_90d", "flow_res_7d")
-NPOOL, POOL_SEED = 250, 20261123
+NPOOL, NPOOL_REFERENCE, POOL_SEED = 60_000, 250, 20261123  # pool draws per half: batched engine / reference
 
 
 def nrm(w):
