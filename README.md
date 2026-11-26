@@ -1,23 +1,27 @@
 **English** | [Tiếng Việt](README.vi.md)
 
-# qforecast: a crypto research stack that tries to prove its own strategies wrong
+# qforecast: a crypto trading research stack built to prove its own strategies wrong
 
 [![ci](https://github.com/HThiuhiu/Low_Latency_Market/actions/workflows/ci.yml/badge.svg)](https://github.com/HThiuhiu/Low_Latency_Market/actions/workflows/ci.yml)
 ![python](https://img.shields.io/badge/python-3.11%2B%20%28CI%203.12%29-blue)
 ![mode](https://img.shields.io/badge/trading-paper%20only-lightgrey)
 
-A solo, end-to-end research and trading system for Binance crypto markets. It has three parts: asyncio services
-on Redis Streams for live spot data, a toolkit that guards against backtest overfitting, and a market-neutral daily
-strategy on USDT-M perpetual futures (crypto futures with no expiry date) that runs unattended on paper. It is built
-with Python, PyTorch, a custom Triton GPU kernel, Docker and CI. Every idea must survive tests built to reject it.
-The minute-bar deep-learning model did not, and was dropped. One daily strategy was kept, and it is waiting for
-data it has never seen.
+A solo, end-to-end research and trading system for Binance crypto markets, in three separate parts:
 
-- **Daily long/short strategy** (code name C5, spec in [`artifacts/models/c5.json`](artifacts/models/c5.json)).
-  Each day it ranks the most liquid perpetuals on published factors such as calm prices, low sensitivity to BTC
-  and low holding cost. It buys the top, shorts the bottom, and sizes the two sides so that BTC moves cancel out.
-- **Status:** a paper portfolio on live Binance prices since November 2026, with no real orders. That is far too
-  short to tell skill from luck.
+- **Real-time pipeline** (the project's first phase): asyncio services on Redis Streams that ingest, score and
+  serve live spot data.
+- **Validation toolkit:** tests that try to reject every backtest before it is believed.
+- **Daily strategy** (C5; frozen spec in [`artifacts/models/c5.json`](artifacts/models/c5.json)): a market-neutral
+  long/short portfolio on USDT-M perpetual futures (crypto futures with no expiry date). Each day it ranks the most
+  liquid perpetuals on published factors such as calm prices, low sensitivity to BTC and low holding cost. It buys
+  the top, shorts the bottom, and sizes the two sides so that BTC moves cancel out. It trades on paper,
+  unattended, and does not use the real-time pipeline.
+
+Built with Python, PyTorch, a custom Triton kernel, Docker and GitHub Actions. The minute-bar deep-learning model
+showed no edge after costs and was dropped. One daily strategy was kept and now waits for data it has never seen.
+
+**Status:** a paper portfolio on live Binance prices since November 2026, with no real orders. That is far too short
+to tell skill from luck.
 
 ## Where to look
 
@@ -26,18 +30,19 @@ data it has never seen.
 | Quant research | [`validation.py`](qforecast/validation.py), [`vault.py`](qforecast/vault.py), [`blockcv.py`](qforecast/blockcv.py), [C5 strategy](docs/C5.md) |
 | ML / GPU | [`scan_triton.py`](qforecast/model/scan_triton.py), [`adaptive/engine.py`](qforecast/adaptive/engine.py), [adaptive weights](docs/ADAPTIVE_WEIGHTS.md) |
 | Backend / data | [`services/`](qforecast/services/), [`swing/paper.py`](qforecast/swing/paper.py), [`exchange/vision.py`](qforecast/exchange/vision.py), [pipeline write-up](docs/LOW_LATENCY_PIPELINE.md) |
+| Engineering process | The `step-01` … `step-08` branches: the daily strategy built one reviewable step at a time (see the end of this page) |
 
 ## Engineering highlights
 
 Live spot data flows ingestor → signal → analytics → gateway. Each stage is an asyncio service on Redis Streams
-that can swap to an in-memory bus in tests. The daily strategy runs as a scheduled job.
+that can swap to an in-memory bus in tests. The daily strategy runs as its own scheduled job.
 
 | What | Problem it solves | Code and tests |
 |---|---|---|
-| **Event-driven services**, Docker Compose, Prometheus | A crashed stage or a dropped socket must not stop the pipeline or lose bars. The supervisor restarts a stage with backoff, the ingestor backfills missed bars on reconnect, and the gateway exposes every stage's metrics | [`services/all.py`](qforecast/services/all.py), [`ingestor.py`](qforecast/services/ingestor.py); [`test_supervisor.py`](tests/test_supervisor.py), [`test_bus.py`](tests/test_bus.py) |
-| **CPU and I/O overhead removed:** incremental features, ring buffers, ONNX Runtime, thread placement | Overhead, not maths, dominated the naive pipeline | [write-up](docs/LOW_LATENCY_PIPELINE.md); rerun: `python -m benchmarks.run_all` |
-| **Custom GPU kernel:** fused Triton kernel for the recurrence of an optional state-space (Mamba-style) layer | A sequential scan wastes the GPU. It is tested on GPU against a reference that passes gradcheck, and kept after the model was dropped | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
-| **Batched simulation engine:** the strategy for a whole batch of signal-weight sets in one pass (CPU or GPU) | A thorough daily weight search is too slow one set at a time. The slow version stays as the parity check | [`engine.py`](qforecast/adaptive/engine.py), [`test_adaptive_engine.py`](tests/test_adaptive_engine.py) |
+| **Event-driven services:** restart with backoff, backfill of missed bars on reconnect, Prometheus metrics via the gateway | A crashed stage or a dropped socket must not stop the pipeline or lose bars | [`services/all.py`](qforecast/services/all.py), [`ingestor.py`](qforecast/services/ingestor.py); [`test_supervisor.py`](tests/test_supervisor.py), [`test_bus.py`](tests/test_bus.py) |
+| **Overhead removed:** incremental features, zero-copy ring buffers, ONNX Runtime, thread placement | Overhead, not maths, dominated the naive pipeline | [write-up](docs/LOW_LATENCY_PIPELINE.md); [`test_features.py`](tests/test_features.py) (online equals offline, causal), [`test_ringbuffer.py`](tests/test_ringbuffer.py); benchmark smoke run in CI |
+| **Custom GPU kernel:** a fused Triton kernel for the recurrence of an optional state-space (Mamba-style) layer, tested on GPU against a reference that passes gradcheck | A sequential scan wastes the GPU. The model was dropped for lack of edge, not because of the kernel, which stays as a tested component | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
+| **Batched simulation engine:** runs the strategy for many signal-weight sets in one tensor pass, on CPU or GPU, with the slow version kept as the parity check | A thorough daily weight search is too slow one set at a time | [`engine.py`](qforecast/adaptive/engine.py), [`test_adaptive_engine.py`](tests/test_adaptive_engine.py) |
 | **Unattended paper bot:** saved state, and every day missed while the machine was off is replayed at that day's open | A laptop bot must survive sleep and restarts without silently skipping trades | [`paper.py`](qforecast/swing/paper.py), [`test_swing_paper.py`](tests/test_swing_paper.py) |
 | **Known-answer tests:** statistics checked on synthetic data where the right answer is known (pure noise vs a planted edge, a sealed file that was changed) | Statistics code can be wrong and still look right | [`test_validation.py`](tests/test_validation.py), [`test_evaluation.py`](tests/test_evaluation.py), [`test_vault.py`](tests/test_vault.py) |
 
@@ -48,6 +53,8 @@ that can swap to an in-memory bus in tests. The daily strategy runs as a schedul
 | Minute-bar CNN-BiLSTM forecaster | Held-out periods with trading costs ([details](docs/LOW_LATENCY_PIPELINE.md#limitations)) | Dropped: no edge after costs |
 | Daily long/short strategy (C5) | Point-in-time data, seven staggered start days, corrections for the number of variants tried | Kept as the candidate; on paper |
 | [Adaptive weights](docs/ADAPTIVE_WEIGHTS.md) (re-optimised daily) | Walk-forward, point-in-time | Did not beat fixed weights; kept on paper for comparison |
+
+### How each verdict was checked
 
 | Backtest pitfall | How it is handled | Test |
 |---|---|---|
@@ -78,14 +85,17 @@ python -m qforecast.swing.dashboard         # paper portfolios on http://127.0.0
 ```
 
 No market data is stored in the repository. It comes from Binance's public endpoints and archives, with no API key.
-CI runs `ruff`, `pytest`, a benchmark smoke run and a Docker build on every push; the GPU test needs an NVIDIA GPU.
+CI runs `ruff`, `pytest`, a benchmark smoke run and a Docker build on every push. The GPU kernel test is skipped on
+machines without an NVIDIA GPU.
 
 ## Key decisions and trade-offs
 
-- **Dropped the minute model instead of tuning it.** It showed no edge after trading costs, and more tuning on the
-  same data would mostly have fitted noise.
-- **Simulated taker fills (market orders).** This is the conservative choice; cheaper maker fills stay unproven
-  until measured.
+- **One bus interface, two backends.** Redis Streams when deployed, an in-memory bus in tests, so the whole pipeline
+  is tested with no server running.
+- **Clean data sealed before any verdict.** A sealed set is hash-checked, opens only with a pre-registration file,
+  and opens once; a second look marks it as used.
+- **Simulated taker fills (market orders).** The conservative choice; cheaper maker fills stay unproven until
+  measured.
 - **Kept the slow reference after writing the fast engine.** A parity test is cheaper than one silent bug in a
   search that runs every day.
 
@@ -101,8 +111,8 @@ CI runs `ruff`, `pytest`, a benchmark smoke run and a Docker build on every push
 <details>
 <summary><b>How the project evolved</b>: one branch per step, readable in order</summary>
 
-The real-time pipeline and the minute-bar model came first and are on the default branch. Each step after that is
-a self-contained branch that answers a gap the previous one left.
+Everything is merged into the default branch. The pipeline and the minute model came first. The daily strategy was
+then built in eight steps, one branch each, every step closing a gap the previous one left.
 
 | Branch | What it adds |
 |---|---|
