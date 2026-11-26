@@ -91,8 +91,8 @@ machines without an NVIDIA GPU.
 ## Key decisions and trade-offs
 
 - **One bus interface, two backends.** Redis Streams when deployed, so a restarted stage replays the stream instead
-  of calling the exchange again; an in-memory bus in tests, so the bus, the signal stage and the recorder are tested with no
-  server running (Redis itself via fakeredis).
+  of calling the exchange again; an in-memory bus behind the same interface, so tests need no server (Redis itself via
+  fakeredis).
 - **Clean data sealed before any verdict.** A sealed set is hash-checked, opens only with a pre-registration file,
   and opens once; a second look marks it as used.
 - **Simulated taker fills (market orders).** The conservative choice; cheaper maker fills stay unproven until
