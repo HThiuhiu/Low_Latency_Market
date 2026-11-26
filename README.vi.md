@@ -18,7 +18,7 @@ phần tách rời:
   giữ thấp. Nó mua nhóm đầu, bán khống nhóm cuối, và chỉnh cỡ hai bên để biến động của BTC triệt tiêu nhau. Nó giao
   dịch giấy, tự chạy, và không dùng pipeline realtime.
 
-Xây bằng Python, PyTorch, một kernel Triton tự viết, Docker và GitHub Actions. Mô hình deep learning nến phút không
+Xây bằng Python, Rust, PyTorch, một kernel Triton tự viết, Docker và GitHub Actions. Mô hình deep learning nến phút không
 có lợi thế sau phí nên đã bị loại. Một chiến thuật ngày được giữ lại và đang chờ dữ liệu nó chưa từng thấy.
 
 **Hiện trạng:** danh mục giấy chạy trên giá Binance thật từ tháng 11/2026, không có lệnh thật. Thời gian đó còn quá
@@ -29,9 +29,9 @@ ngắn để phân biệt kỹ năng với may mắn.
 | Nếu bạn tuyển | Mở trước |
 |---|---|
 | Nghiên cứu quant | [`validation.py`](qforecast/validation.py), [`vault.py`](qforecast/vault.py), [`blockcv.py`](qforecast/blockcv.py), [chiến thuật C5](docs/C5.md) |
-| ML / GPU | [`scan_triton.py`](qforecast/model/scan_triton.py), [`adaptive/engine.py`](qforecast/adaptive/engine.py), [trọng số thích nghi](docs/ADAPTIVE_WEIGHTS.md) |
+| ML / hiệu năng | [`scan_triton.py`](qforecast/model/scan_triton.py), [`adaptive/engine.py`](qforecast/adaptive/engine.py), [`crates/qf_core`](crates/qf_core/src/lib.rs), [trọng số thích nghi](docs/ADAPTIVE_WEIGHTS.md) |
 | Backend / dữ liệu | [`services/`](qforecast/services/), [`swing/paper.py`](qforecast/swing/paper.py), [`exchange/vision.py`](qforecast/exchange/vision.py), [bài viết về pipeline](docs/LOW_LATENCY_PIPELINE.vi.md) |
-| Quy trình làm việc | Các nhánh `step-01` … `step-08`: chiến thuật ngày được xây từng bước, mỗi bước xem lại được (xem cuối trang) |
+| Quy trình làm việc | Các nhánh `step-01` … `step-09`: chiến thuật ngày được xây từng bước, mỗi bước xem lại được (xem cuối trang) |
 
 ## Điểm nhấn kỹ thuật
 
@@ -44,6 +44,7 @@ Streams. Chiến thuật ngày chạy như một tác vụ hẹn giờ riêng.
 | **Bỏ chi phí thừa:** feature tính tăng dần, ring buffer không sao chép, ONNX Runtime, gán luồng vào nhân | Chi phí thừa, không phải phép tính, chiếm phần lớn thời gian của pipeline ngây thơ | [bài viết](docs/LOW_LATENCY_PIPELINE.vi.md); [`test_features.py`](tests/test_features.py) (online bằng offline, không nhìn trước), [`test_ringbuffer.py`](tests/test_ringbuffer.py); CI chạy thử benchmark |
 | **Kernel GPU tự viết:** kernel Triton gộp cho phép hồi quy của một lớp state-space (kiểu Mamba) tùy chọn, test trên GPU với bản tham chiếu qua gradcheck; giữ lại như một thành phần đã test sau khi mô hình bị loại vì không có lợi thế | Quét tuần tự làm phí GPU | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
 | **Engine giả lập theo lô:** chạy chiến thuật cho nhiều bộ trọng số tín hiệu trong một lượt tensor, trên CPU hoặc GPU, giữ bản chậm làm bản đối chiếu | Tìm trọng số kỹ mỗi ngày mà chạy từng bộ một thì quá chậm | [`engine.py`](qforecast/adaptive/engine.py), [`test_adaptive_engine.py`](tests/test_adaptive_engine.py) |
+| **Phần chạy nóng bằng Rust:** thống kê trượt, max / min trượt và xếp hạng coin mỗi ngày viết bằng Rust (PyO3, Rayon), tự dùng khi đã cài wheel tùy chọn, có bản Python làm dự phòng | Tín hiệu ngày phải tính lại cửa sổ trượt và xếp hạng chéo cho mọi coin, mọi ngày | [`crates/qf_core`](crates/qf_core/src/lib.rs), [`accel.py`](qforecast/accel.py), [`test_rust_parity.py`](tests/test_rust_parity.py) |
 | **Bot paper tự chạy:** lưu trạng thái, ngày nào máy tắt thì chạy bù ở giá mở cửa của ngày đó | Bot trên laptop phải sống qua lúc máy ngủ và khởi động lại mà không âm thầm bỏ lệnh | [`paper.py`](qforecast/swing/paper.py), [`test_swing_paper.py`](tests/test_swing_paper.py) |
 | **Test có đáp án biết trước:** kiểm phần thống kê trên dữ liệu giả mà đáp án đúng đã biết (nhiễu thuần so với lợi thế cài sẵn, một file niêm phong bị sửa) | Code thống kê có thể sai mà trông vẫn đúng | [`test_validation.py`](tests/test_validation.py), [`test_evaluation.py`](tests/test_evaluation.py), [`test_vault.py`](tests/test_vault.py) |
 
@@ -83,10 +84,13 @@ python -m qforecast.swing.data              # tải lịch sử và dựng dữ 
 python -m qforecast.swing.backtest          # backtest C5 trên tài khoản USDT: cỡ lệnh thật, phí, funding
 python -m qforecast.swing.paper --plan      # lệnh hôm nay, không giao dịch
 python -m qforecast.swing.dashboard         # danh mục giấy tại http://127.0.0.1:8765
+
+# Tùy chọn: phần chạy nóng bằng Rust (cần Rust toolchain); QF_NO_RUST=1 để quay về bản Python
+pip install maturin && cd crates/qf_core && maturin build --release && pip install target/wheels/qforecast_core-*.whl
 ```
 
 Repo không chứa dữ liệu thị trường. Dữ liệu lấy từ endpoint và kho lưu trữ công khai của Binance, không cần API key.
-Mỗi lần push, CI chạy `ruff`, `pytest`, chạy thử benchmark và build Docker. Test kernel GPU được bỏ qua trên máy
+Mỗi lần push, CI chạy `ruff`, `pytest`, chạy thử benchmark, build Rust kèm test đối chiếu, và build Docker. Test kernel GPU được bỏ qua trên máy
 không có GPU NVIDIA.
 
 ## Quyết định chính và đánh đổi
@@ -112,7 +116,7 @@ không có GPU NVIDIA.
 <details>
 <summary><b>Dự án đã phát triển thế nào</b>: mỗi bước một nhánh, đọc được theo thứ tự</summary>
 
-Mọi thứ đã merge vào nhánh mặc định. Pipeline và mô hình phút có trước. Sau đó chiến thuật ngày được xây trong tám
+Mọi thứ đã merge vào nhánh mặc định. Pipeline và mô hình phút có trước. Sau đó chiến thuật ngày được xây trong chín
 bước, mỗi bước một nhánh, bước sau lấp chỗ trống mà bước trước còn để lại.
 
 | Nhánh | Thêm gì |
@@ -125,6 +129,7 @@ bước, mỗi bước một nhánh, bước sau lấp chỗ trống mà bước
 | `step-06/adaptive-weights` | Trọng số thích nghi, có test đúng thời điểm |
 | `step-07/paper-dashboard` | Bot paper trên sổ lệnh thật, chạy bù ngày lỡ, dashboard trên máy |
 | `step-08/fast-adaptive-engine` | Engine giả lập theo lô, có test đối chiếu với bản tham chiếu |
+| `step-09/rust-hot-paths` | Thống kê trượt và xếp hạng coin bằng Rust, có test đối chiếu và job CI |
 
 </details>
 
@@ -138,6 +143,8 @@ qforecast/   services/ core/ storage/ model/ trainer/ sim/ agent/   pipeline spo
                                                                     và cố vấn LLM chỉ có quyền phủ quyết (chỉ paper)
              exchange/ swing/ adaptive/                             dữ liệu perp ngày, C5, bot paper, trọng số thích nghi
              validation.py evaluation.py blockcv.py vault.py        bộ công cụ kiểm định
+             accel.py                                               nạp phần Rust tùy chọn
+crates/qf_core/                                                     Rust (PyO3): thống kê trượt, xếp hạng coin
 tests/  benchmarks/  deploy/  docs/  research/  ModelTrade/ (prototype ban đầu)
 ```
 

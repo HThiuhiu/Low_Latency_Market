@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "qforecast-core"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "Rust hot paths for qforecast (optional; pure-Python fallbacks exist)"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "qforecast_core"

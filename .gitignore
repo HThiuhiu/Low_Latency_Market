@@ -22,3 +22,6 @@ research/results/*.log
 # secrets (API keys) - never commit
 .env
 .env.*
+
+# Rust build output
+crates/*/target/
