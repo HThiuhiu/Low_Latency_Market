@@ -34,14 +34,14 @@ to tell skill from luck.
 
 ## Engineering highlights
 
-Live spot data flows ingestor → signal → analytics → gateway. Each stage is an asyncio service on Redis Streams
-that can swap to an in-memory bus in tests. The daily strategy runs as its own scheduled job.
+Live spot data flows ingestor → signal → analytics → gateway. Each stage is an asyncio service on Redis Streams.
+The daily strategy runs as its own scheduled job.
 
 | What | Problem it solves | Code and tests |
 |---|---|---|
 | **Event-driven services:** restart with backoff, backfill of missed bars on reconnect, Prometheus metrics via the gateway | A crashed stage or a dropped socket must not stop the pipeline or lose bars | [`services/all.py`](qforecast/services/all.py), [`ingestor.py`](qforecast/services/ingestor.py); [`test_supervisor.py`](tests/test_supervisor.py), [`test_bus.py`](tests/test_bus.py) |
 | **Overhead removed:** incremental features, zero-copy ring buffers, ONNX Runtime, thread placement | Overhead, not maths, dominated the naive pipeline | [write-up](docs/LOW_LATENCY_PIPELINE.md); [`test_features.py`](tests/test_features.py) (online equals offline, causal), [`test_ringbuffer.py`](tests/test_ringbuffer.py); benchmark smoke run in CI |
-| **Custom GPU kernel:** a fused Triton kernel for the recurrence of an optional state-space (Mamba-style) layer, tested on GPU against a reference that passes gradcheck | A sequential scan wastes the GPU. The model was dropped for lack of edge, not because of the kernel, which stays as a tested component | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
+| **Custom GPU kernel:** a fused Triton kernel for the recurrence of an optional state-space (Mamba-style) layer, tested on GPU against a reference that passes gradcheck; kept as a tested component after the model was dropped for lack of edge | A sequential scan wastes the GPU | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
 | **Batched simulation engine:** runs the strategy for many signal-weight sets in one tensor pass, on CPU or GPU, with the slow version kept as the parity check | A thorough daily weight search is too slow one set at a time | [`engine.py`](qforecast/adaptive/engine.py), [`test_adaptive_engine.py`](tests/test_adaptive_engine.py) |
 | **Unattended paper bot:** saved state, and every day missed while the machine was off is replayed at that day's open | A laptop bot must survive sleep and restarts without silently skipping trades | [`paper.py`](qforecast/swing/paper.py), [`test_swing_paper.py`](tests/test_swing_paper.py) |
 | **Known-answer tests:** statistics checked on synthetic data where the right answer is known (pure noise vs a planted edge, a sealed file that was changed) | Statistics code can be wrong and still look right | [`test_validation.py`](tests/test_validation.py), [`test_evaluation.py`](tests/test_evaluation.py), [`test_vault.py`](tests/test_vault.py) |
@@ -51,10 +51,10 @@ that can swap to an in-memory bus in tests. The daily strategy runs as its own s
 | Idea | How it was tested | Verdict |
 |---|---|---|
 | Minute-bar CNN-BiLSTM forecaster | Held-out periods with trading costs ([details](docs/LOW_LATENCY_PIPELINE.md#limitations)) | Dropped: no edge after costs |
-| Daily long/short strategy (C5) | Point-in-time data, seven staggered start days, corrections for the number of variants tried | Kept as the candidate; on paper |
+| Daily long/short strategy (C5) | Point-in-time data, seven staggered start days, corrections for the number of variants tried | Kept as the only candidate; trading on paper |
 | [Adaptive weights](docs/ADAPTIVE_WEIGHTS.md) (re-optimised daily) | Walk-forward, point-in-time | Did not beat fixed weights; kept on paper for comparison |
 
-### How each verdict was checked
+### Backtest pitfalls and how each is handled
 
 | Backtest pitfall | How it is handled | Test |
 |---|---|---|
@@ -90,8 +90,9 @@ machines without an NVIDIA GPU.
 
 ## Key decisions and trade-offs
 
-- **One bus interface, two backends.** Redis Streams when deployed, an in-memory bus in tests, so the whole pipeline
-  is tested with no server running.
+- **One bus interface, two backends.** Redis Streams when deployed, so a restarted stage replays the stream instead
+  of calling the exchange again; an in-memory bus in tests, so every stage is tested with no server running (Redis
+  itself via fakeredis).
 - **Clean data sealed before any verdict.** A sealed set is hash-checked, opens only with a pre-registration file,
   and opens once; a second look marks it as used.
 - **Simulated taker fills (market orders).** The conservative choice; cheaper maker fills stay unproven until
