@@ -39,7 +39,7 @@ The daily strategy runs as its own scheduled job.
 
 | What | Problem it solves | Code and tests |
 |---|---|---|
-| **Event-driven services:** restart with backoff, backfill of missed bars on reconnect, Prometheus metrics via the gateway | A crashed stage or a dropped socket must not stop the pipeline or lose bars | [`services/all.py`](qforecast/services/all.py), [`ingestor.py`](qforecast/services/ingestor.py); [`test_supervisor.py`](tests/test_supervisor.py), [`test_bus.py`](tests/test_bus.py) |
+| **Event-driven services:** restart with backoff (tested); backfill of missed bars on reconnect and Prometheus metrics via the gateway (in code, not yet tested) | A crashed stage or a dropped socket must not stop the pipeline or lose bars | [`services/all.py`](qforecast/services/all.py), [`ingestor.py`](qforecast/services/ingestor.py); [`test_supervisor.py`](tests/test_supervisor.py), [`test_bus.py`](tests/test_bus.py) |
 | **Overhead removed:** incremental features, zero-copy ring buffers, ONNX Runtime, thread placement | Overhead, not maths, dominated the naive pipeline | [write-up](docs/LOW_LATENCY_PIPELINE.md); [`test_features.py`](tests/test_features.py) (online equals offline, causal), [`test_ringbuffer.py`](tests/test_ringbuffer.py); benchmark smoke run in CI |
 | **Custom GPU kernel:** a fused Triton kernel for the recurrence of an optional state-space (Mamba-style) layer, tested on GPU against a reference that passes gradcheck; kept as a tested component after the model was dropped for lack of edge | A sequential scan wastes the GPU | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
 | **Batched simulation engine:** runs the strategy for many signal-weight sets in one tensor pass, on CPU or GPU, with the slow version kept as the parity check | A thorough daily weight search is too slow one set at a time | [`engine.py`](qforecast/adaptive/engine.py), [`test_adaptive_engine.py`](tests/test_adaptive_engine.py) |
@@ -91,8 +91,8 @@ machines without an NVIDIA GPU.
 ## Key decisions and trade-offs
 
 - **One bus interface, two backends.** Redis Streams when deployed, so a restarted stage replays the stream instead
-  of calling the exchange again; an in-memory bus in tests, so every stage is tested with no server running (Redis
-  itself via fakeredis).
+  of calling the exchange again; an in-memory bus in tests, so the bus, the signal stage and the recorder are tested with no
+  server running (Redis itself via fakeredis).
 - **Clean data sealed before any verdict.** A sealed set is hash-checked, opens only with a pre-registration file,
   and opens once; a second look marks it as used.
 - **Simulated taker fills (market orders).** The conservative choice; cheaper maker fills stay unproven until
