@@ -8,7 +8,7 @@ The reference evaluator (qforecast.adaptive.search.NumpyBook) runs qforecast.swi
 weight set. Here the weight set is a batch dimension instead: one pass over the rows ranks the coins for every set
 with one matrix product and one stable sort, builds every tranche with scatter operations, and keeps the state of
 the 7 sub-books for all sets in one tensor. Same tranche, beta hedge, thin leg, squeeze guard, costs, funding;
-tests/test_adaptive.py checks that both evaluators give the same daily P&L. float32 on a GPU is the fast setting;
+tests/test_adaptive_engine.py checks that both evaluators give the same daily P&L. float32 on a GPU is the fast setting;
 float64 on a CPU is the exact one.
 """
 

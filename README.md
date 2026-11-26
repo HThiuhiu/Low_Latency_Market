@@ -1,75 +1,153 @@
 **English** | [Tiếng Việt](README.vi.md)
 
-# Adaptive Crypto Trading: from raw data to a fast adaptive algorithm
+# qforecast: a crypto research stack that tries to prove its own strategies wrong
 
 [![ci](https://github.com/HThiuhiu/Low_Latency_Market/actions/workflows/ci.yml/badge.svg)](https://github.com/HThiuhiu/Low_Latency_Market/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.12-blue)
+![mode](https://img.shields.io/badge/trading-paper%20only-lightgrey)
 
-A personal research project on Binance USDT-M perpetuals. It covers a real-time data pipeline, a cross-sectional
-long/short strategy (**C5**), a validation toolkit built so that I would not fool myself, and an **adaptive
-signal-weight algorithm** running on a batched torch engine. Everything runs as paper trading.
+A solo, end-to-end research system for Binance USDT-M perpetual futures (crypto futures with no expiry date). It is
+built in Python with asyncio services on Redis Streams, PyTorch with a custom Triton GPU kernel, and a statistics
+toolkit against backtest overfitting. Every idea is held to one rule: keep it only if it survives tests built to
+reject it. The minute-bar model did not. One daily strategy was kept as the candidate and now runs on paper, to be
+confirmed on data it has never seen.
 
-## Highlights
+- **Real-time pipeline:** Binance WebSocket streams into asyncio services on Redis Streams, with missed bars
+  backfilled on every reconnect, features updated in place on ring buffers, and ONNX Runtime inference.
+- **Validation toolkit:** guards against using future data, ignoring delisted coins, and keeping the luckiest of
+  many variants.
+- **Daily long/short strategy (C5):** a market-neutral portfolio (long some coins, short others), adjusted every
+  day. It ranks the most liquid perpetuals on published factors (low volatility, low beta, no recent spike, low
+  funding, closeness to recent highs, taker buying), buys the top, shorts the bottom and hedges out BTC.
 
-- **Point-in-time data.** Delisted coins are kept, dead coins are filtered out, and the universe is ranked only on
-  past data. Tests prove that no signal sees the future.
-- **Exchange-realistic simulation.** Costs, funding, minimum orders, a beta hedge, a short-squeeze guard, and
-  staggered sub-books so a result does not depend on its start day.
-- **Honest validation.** Purged and combinatorial CV, deflated Sharpe, PBO, a multi-block history screen, and a
-  sealed vault for clean tests.
-- **Adaptive algorithm.** Signal weights are re-optimised every day over a trailing window, with strict
-  no-look-ahead timing.
-- **Performance engineering.** The adaptive search runs on a batched torch engine (CPU / GPU). A slower reference
-  implementation is kept, and a test checks that both give the same P&L.
+**Status:** C5 has run as a paper book on live Binance prices since November 2026, with no real orders. That is
+far too short to tell skill from luck; only more forward data can.
 
-## How it evolved
+## Where to look
 
-Each step answered a need left open by the previous one.
-
-| Step | Question | What I built |
-|---|---|---|
-| 1 | How do I clean market data and compute on it fast? | Real-time pipeline, point-in-time daily cube, signal library |
-| 2 | Can a model on this data make decisions? | Minute-bar CNN-BiLSTM forecaster, then a long/short book model with an exchange-style backtest |
-| 3 | How do I tell an edge from luck? | Validation toolkit, then the C5 strategy built under its rules |
-| 4 | Can the strategy adapt as the market changes? | Daily adaptive signal weights, deployed on a paper bot with a dashboard |
-| 5 | Can the adaptive search be fast enough to be thorough? | Batched torch engine, running sums instead of re-simulation, GPU support |
-
-Each step is a branch, from `step-01/data-pipeline` to `step-08/fast-adaptive-engine`, merged into main in order.
-
-## Architecture
-
-| Layer | Modules |
+| If you hire for | Open first |
 |---|---|
-| Real-time pipeline | `qforecast/services/`, `core/`, `storage/`, `model/` |
-| Data | `qforecast/exchange/vision.py`, `qforecast/swing/cube.py`, `data.py` |
-| Signals | `qforecast/swing/features.py`, `signals.py` |
-| Strategy and simulation | `qforecast/swing/book.py`, `strategy.py`, `backtest.py`, `artifacts/models/c5.json` |
-| Validation | `qforecast/validation.py`, `evaluation.py`, `blockcv.py`, `vault.py` |
-| Adaptive algorithm | `qforecast/adaptive/search.py`, `weights.py`, `engine.py` |
-| Paper trading | `qforecast/swing/account.py`, `paper.py`, `dashboard.py` |
+| Quant research | [`qforecast/validation.py`](qforecast/validation.py), [`qforecast/vault.py`](qforecast/vault.py), [`qforecast/blockcv.py`](qforecast/blockcv.py), [`docs/C5.md`](docs/C5.md) |
+| ML / GPU | [`qforecast/model/scan_triton.py`](qforecast/model/scan_triton.py), [`qforecast/adaptive/engine.py`](qforecast/adaptive/engine.py) |
+| Backend / data | [`qforecast/services/`](qforecast/services/), [`qforecast/swing/paper.py`](qforecast/swing/paper.py), [`qforecast/exchange/vision.py`](qforecast/exchange/vision.py) |
 
-## Quick start
+## Check the core claims (offline)
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements-dev.txt
-
-python -m qforecast.swing.data              # build the daily cube
-python -m qforecast.swing.backtest          # backtest C5
-python -m qforecast.swing.paper --plan      # today's picks (no trade)
-python -m qforecast.swing.dashboard         # paper books on http://127.0.0.1:8765
-pytest -q                                   # offline tests on synthetic data
+pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install -r requirements-dev.txt
+pytest -q tests/test_swing_signals.py::test_every_signal_is_point_in_time \
+          tests/test_adaptive_engine.py::test_engine_matches_the_reference_book \
+          tests/test_validation.py::test_pbo_noise_vs_real_edge \
+          tests/test_vault.py::test_vault_rejects_changed_cube
 ```
 
-## Status
+Each test builds a synthetic market ([`tests/synth.py`](tests/synth.py)), so nothing is downloaded. Together they
+check four things:
 
-- C5 and the adaptive book run on paper, the only clean test left.
-- In walk-forward tests the adaptive weights have not beaten the fixed ones yet. They are kept as a research book.
-- The C5 weights were chosen on the same history the backtest uses, so a backtest shows that the code works, not
-  what to expect.
+- no signal sees the future;
+- the fast engine gives the same P&L as the reference;
+- the overfitting test tells noise from a real edge;
+- sealed test data cannot be swapped.
 
-## Docs
+## What was tested, and the verdict
 
-[C5 strategy](docs/C5.md) · [Adaptive weights](docs/ADAPTIVE_WEIGHTS.md) ·
+| Idea | How it was tested | Verdict |
+|---|---|---|
+| Minute-bar CNN-BiLSTM forecaster | Held-out periods with trading costs ([details](docs/LOW_LATENCY_PIPELINE.md#limitations)) | Dropped: no edge after costs |
+| Strategy C5 | Point-in-time data, seven staggered start days, corrections for the number of variants tried | Kept as the candidate; on paper (see limitations) |
+| [Adaptive weights](docs/ADAPTIVE_WEIGHTS.md) (re-optimised daily) | Walk-forward, point-in-time | Did not beat fixed weights; kept on paper for comparison |
+
+The method behind these verdicts:
+
+| Backtest pitfall | How it is handled | Test |
+|---|---|---|
+| Survivorship: today's symbol list holds only survivors | Every perp ever listed is downloaded; the universe is ranked only on data before each month | [`test_swing_data.py`](tests/test_swing_data.py) |
+| Look-ahead: using information not yet known | One timing rule everywhere: decide at the close, trade at the next open | [`test_swing_signals.py`](tests/test_swing_signals.py), [`test_c5.py`](tests/test_c5.py), [`test_adaptive.py`](tests/test_adaptive.py) |
+| Ignoring costs and funding | Fees, real funding, and paper fills that walk the order book for the full order size | [`test_swing_book.py`](tests/test_swing_book.py), [`test_swing_account.py`](tests/test_swing_account.py) |
+| Luck of the start date | The mean of seven sub-books that rebalance on different weekdays | [`test_swing_book.py`](tests/test_swing_book.py) |
+| Keeping the luckiest of many variants | Deflated Sharpe and the probability of backtest overfitting (PBO) discount a result by the number of variants tried; a winner must also win in most time blocks | [`test_validation.py`](tests/test_validation.py), [`test_evaluation.py`](tests/test_evaluation.py) |
+| Treating history as confirmation | History can only reject; confirmation comes from sealed or forward data | [`test_vault.py`](tests/test_vault.py) |
+
+## Engineering highlights
+
+Live data flows ingestor → signal → analytics → gateway. Each stage is an asyncio service on Redis Streams that can
+swap to an in-memory bus in tests. The daily strategy reuses the exchange and data layers as a scheduled job.
+
+| What | Why | Code and tests |
+|---|---|---|
+| **Event-driven services:** Redis Streams or an in-memory bus, Docker Compose, Prometheus | A supervisor restarts a crashed stage with backoff; Prometheus scrapes every stage | [`services/all.py`](qforecast/services/all.py), [`docker-compose.yml`](docker-compose.yml) |
+| **CPU and I/O overhead removed:** incremental features, ring buffers, ONNX Runtime, thread placement | Overhead, not maths, dominated the naive pipeline | [write-up](docs/LOW_LATENCY_PIPELINE.md); rerun: `python -m benchmarks.run_all` |
+| **Custom GPU kernel:** fused Triton kernel for the core recurrence of an optional state-space (Mamba-style) layer | Kept as GPU engineering after the model was dropped; tested on GPU against a reference that passes gradcheck | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
+| **Batched simulation engine:** the strategy for a whole batch of signal-weight sets in one pass (PyTorch, CPU or GPU) | A thorough daily weight search is too slow one set at a time; the slow version stays as the parity check | [`engine.py`](qforecast/adaptive/engine.py), [`test_adaptive_engine.py`](tests/test_adaptive_engine.py) |
+| **Unattended paper bot:** a scheduled daily job with saved state; every day missed while the machine was off is replayed at that day's open | A laptop bot must survive sleep and restarts without silently skipping trades | [`paper.py`](qforecast/swing/paper.py), [`test_swing_paper.py`](tests/test_swing_paper.py) |
+
+## Run it
+
+```bash
+pytest -q                                   # full suite, offline, synthetic data
+python -m qforecast.swing.data              # download the history and build the daily dataset
+python -m qforecast.swing.backtest          # C5 backtest on a USDT account: real order sizes, fees, funding
+python -m qforecast.swing.paper --plan      # today's picks and orders, nothing is traded
+python -m qforecast.swing.dashboard         # paper books on http://127.0.0.1:8765
+```
+
+No market data is stored in the repository. It comes from Binance's public endpoints and archives, with no API key.
+On every push and pull request, CI runs `ruff`, `pytest`, a benchmark smoke run and a Docker build. The GPU kernel
+test is skipped on machines without an NVIDIA GPU.
+
+## Key decisions and trade-offs
+
+- **Dropped the minute model instead of tuning it.** It showed no edge after trading costs, and more tuning on the
+  same data would mostly have fitted noise.
+- **Simulated taker fills (market orders).** This is the conservative choice. Cheaper maker fills are possible but
+  unproven until measured.
+- **Kept the slow reference after writing the fast engine.** A parity test against it is cheaper than one silent
+  bug in a search that runs every day.
+
+## Limitations and next steps
+
+| Limitation | Next step |
+|---|---|
+| C5's signal weights were chosen on the same history the backtest uses, so backtests prove that the code works, not what to expect | Score the sealed forward window: data recorded after the design was frozen, hash-locked so it cannot be swapped |
+| Only taker fills are simulated | Measure maker fills (resting limit orders, lower fee) with small live orders before any real capital |
+| Adaptive weights are unproven | Keep them on paper beside C5, and switch only if forward data favours them |
+| No intraday squeezes or liquidation in the simulation; one exchange, most liquid perpetuals only | Out of scope for now |
+
+<details>
+<summary><b>How the project evolved</b>: one branch per step, readable in order</summary>
+
+The real-time pipeline and the minute-bar model came first and are on the default branch. Each step after that is
+a self-contained branch that answers a gap the previous one left.
+
+| Branch | What it adds |
+|---|---|
+| `step-01/data-pipeline` | Full perp history with delisted coins, a monthly universe, the daily dataset |
+| `step-02/signal-features` | Signals from published research, ranked across coins every day |
+| `step-03/book-model` | Long/short portfolio with the market hedge, fees and funding; backtest on a USDT account |
+| `step-04/research-toolkit` | Purged and combinatorial cross-validation, deflated Sharpe, PBO, block screen, sealed vault |
+| `step-05/strategy-c5` | C5, built under those rules |
+| `step-06/adaptive-weights` | Adaptive weights, with a point-in-time test |
+| `step-07/paper-dashboard` | Paper bot on the live order book, replay of missed days, local dashboard |
+| `step-08/fast-adaptive-engine` | Batched simulation engine with a parity test against the reference |
+
+</details>
+
+<details>
+<summary><b>Repository layout</b></summary>
+
+The repository is named after its first phase, the low-latency pipeline. The package is `qforecast`.
+
+```text
+qforecast/   services/ core/ storage/ model/ trainer/ sim/   real-time pipeline and the minute-bar model
+             agent/                                          LLM advisor whose proposals fixed risk rules can veto (paper only)
+             exchange/ swing/ adaptive/                      daily data, C5, paper bot, adaptive weights
+             validation.py evaluation.py blockcv.py vault.py validation toolkit
+tests/  benchmarks/  deploy/  docs/  research/  ModelTrade/ (the original prototype)
+```
+
+</details>
+
+Docs: [C5 strategy](docs/C5.md) · [Adaptive weights](docs/ADAPTIVE_WEIGHTS.md) ·
 [Low-latency pipeline](docs/LOW_LATENCY_PIPELINE.md) · [Benchmarks](RESULTS_BENCHMARK.md)
 
-> Paper trading only. No real orders. Not financial advice.
+> Research and paper trading only. No real orders are sent. Not financial advice.
