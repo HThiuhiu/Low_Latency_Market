@@ -17,7 +17,7 @@ A solo, end-to-end research and trading system for Binance crypto markets, in th
   the top, shorts the bottom, and sizes the two sides so that BTC moves cancel out. It trades on paper,
   unattended, and does not use the real-time pipeline.
 
-Built with Python, PyTorch, a custom Triton kernel, Docker and GitHub Actions. The minute-bar deep-learning model
+Built with Python, Rust, PyTorch, a custom Triton kernel, Docker and GitHub Actions. The minute-bar deep-learning model
 showed no edge after costs and was dropped. One daily strategy was kept and now waits for data it has never seen.
 
 **Status:** a paper portfolio on live Binance prices since November 2026, with no real orders. That is far too short
@@ -28,9 +28,9 @@ to tell skill from luck.
 | If you hire for | Open first |
 |---|---|
 | Quant research | [`validation.py`](qforecast/validation.py), [`vault.py`](qforecast/vault.py), [`blockcv.py`](qforecast/blockcv.py), [C5 strategy](docs/C5.md) |
-| ML / GPU | [`scan_triton.py`](qforecast/model/scan_triton.py), [`adaptive/engine.py`](qforecast/adaptive/engine.py), [adaptive weights](docs/ADAPTIVE_WEIGHTS.md) |
+| ML / performance | [`scan_triton.py`](qforecast/model/scan_triton.py), [`adaptive/engine.py`](qforecast/adaptive/engine.py), [`crates/qf_core`](crates/qf_core/src/lib.rs), [adaptive weights](docs/ADAPTIVE_WEIGHTS.md) |
 | Backend / data | [`services/`](qforecast/services/), [`swing/paper.py`](qforecast/swing/paper.py), [`exchange/vision.py`](qforecast/exchange/vision.py), [pipeline write-up](docs/LOW_LATENCY_PIPELINE.md) |
-| Engineering process | The `step-01` … `step-08` branches: the daily strategy built one reviewable step at a time (see the end of this page) |
+| Engineering process | The `step-01` … `step-09` branches: the daily strategy built one reviewable step at a time (see the end of this page) |
 
 ## Engineering highlights
 
@@ -43,6 +43,7 @@ The daily strategy runs as its own scheduled job.
 | **Overhead removed:** incremental features, zero-copy ring buffers, ONNX Runtime, thread placement | Overhead, not maths, dominated the naive pipeline | [write-up](docs/LOW_LATENCY_PIPELINE.md); [`test_features.py`](tests/test_features.py) (online equals offline, causal), [`test_ringbuffer.py`](tests/test_ringbuffer.py); benchmark smoke run in CI |
 | **Custom GPU kernel:** a fused Triton kernel for the recurrence of an optional state-space (Mamba-style) layer, tested on GPU against a reference that passes gradcheck; kept as a tested component after the model was dropped for lack of edge | A sequential scan wastes the GPU | [`scan_triton.py`](qforecast/model/scan_triton.py), [`test_scan.py`](tests/test_scan.py) |
 | **Batched simulation engine:** runs the strategy for many signal-weight sets in one tensor pass, on CPU or GPU, with the slow version kept as the parity check | A thorough daily weight search is too slow one set at a time | [`engine.py`](qforecast/adaptive/engine.py), [`test_adaptive_engine.py`](tests/test_adaptive_engine.py) |
+| **Rust hot paths:** rolling statistics, rolling max / min and per-day coin ranking in Rust (PyO3, Rayon), used automatically when the optional wheel is installed, with the Python version as the fallback | The daily signals recompute rolling windows and cross-sectional ranks for every coin and every day | [`crates/qf_core`](crates/qf_core/src/lib.rs), [`accel.py`](qforecast/accel.py), [`test_rust_parity.py`](tests/test_rust_parity.py) |
 | **Unattended paper bot:** saved state, and every day missed while the machine was off is replayed at that day's open | A laptop bot must survive sleep and restarts without silently skipping trades | [`paper.py`](qforecast/swing/paper.py), [`test_swing_paper.py`](tests/test_swing_paper.py) |
 | **Known-answer tests:** statistics checked on synthetic data where the right answer is known (pure noise vs a planted edge, a sealed file that was changed) | Statistics code can be wrong and still look right | [`test_validation.py`](tests/test_validation.py), [`test_evaluation.py`](tests/test_evaluation.py), [`test_vault.py`](tests/test_vault.py) |
 
@@ -82,11 +83,14 @@ python -m qforecast.swing.data              # download the history and build the
 python -m qforecast.swing.backtest          # C5 backtest on a USDT account: real order sizes, fees, funding
 python -m qforecast.swing.paper --plan      # today's picks and orders, nothing is traded
 python -m qforecast.swing.dashboard         # paper portfolios on http://127.0.0.1:8765
+
+# Optional Rust hot paths (needs a Rust toolchain); QF_NO_RUST=1 switches back to the Python version
+pip install maturin && cd crates/qf_core && maturin build --release && pip install target/wheels/qforecast_core-*.whl
 ```
 
 No market data is stored in the repository. It comes from Binance's public endpoints and archives, with no API key.
-CI runs `ruff`, `pytest`, a benchmark smoke run and a Docker build on every push. The GPU kernel test is skipped on
-machines without an NVIDIA GPU.
+CI runs `ruff`, `pytest`, a benchmark smoke run, a Rust build with parity tests, and a Docker build on every push.
+The GPU kernel test is skipped on machines without an NVIDIA GPU.
 
 ## Key decisions and trade-offs
 
@@ -113,7 +117,7 @@ machines without an NVIDIA GPU.
 <summary><b>How the project evolved</b>: one branch per step, readable in order</summary>
 
 Everything is merged into the default branch. The pipeline and the minute model came first. The daily strategy was
-then built in eight steps, one branch each, every step closing a gap the previous one left.
+then built in nine steps, one branch each, every step closing a gap the previous one left.
 
 | Branch | What it adds |
 |---|---|
@@ -125,6 +129,7 @@ then built in eight steps, one branch each, every step closing a gap the previou
 | `step-06/adaptive-weights` | Adaptive weights, with a point-in-time test |
 | `step-07/paper-dashboard` | Paper bot on the live order book, replay of missed days, local dashboard |
 | `step-08/fast-adaptive-engine` | Batched simulation engine with a parity test against the reference |
+| `step-09/rust-hot-paths` | Rolling statistics and coin ranking in Rust, with parity tests and a CI job |
 
 </details>
 
@@ -138,6 +143,8 @@ qforecast/   services/ core/ storage/ model/ trainer/ sim/ agent/   real-time sp
                                                                     and an LLM advisor limited to veto power (paper only)
              exchange/ swing/ adaptive/                             daily perp data, C5, paper bot, adaptive weights
              validation.py evaluation.py blockcv.py vault.py        validation toolkit
+             accel.py                                               loads the optional Rust hot paths
+crates/qf_core/                                                     Rust (PyO3) rolling statistics and coin ranking
 tests/  benchmarks/  deploy/  docs/  research/  ModelTrade/ (the original prototype)
 ```
 

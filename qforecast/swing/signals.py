@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from qforecast.accel import rust_fn
 from qforecast.swing.features import rolling_mean
 
 
@@ -54,6 +55,15 @@ def _lag(x, k):
 
 
 def _roll(fn, x, w):
+    """Trailing fn over w rows. Rolling nanmax / nanmin run in Rust (an O(T) monotonic deque) when the optional
+    wheel is installed; _roll_py is the reference it must match (tests/test_rust_parity.py)."""
+    rx = rust_fn("rolling_extreme")
+    if rx is not None and np.ndim(x) == 2 and int(w) > 0 and fn in (np.nanmax, np.nanmin):
+        return rx(np.ascontiguousarray(x, np.float64), int(w), fn is np.nanmax)
+    return _roll_py(fn, x, w)
+
+
+def _roll_py(fn, x, w):
     from numpy.lib.stride_tricks import sliding_window_view
 
     out = np.full(x.shape, np.nan)

@@ -1,0 +1,19 @@
+[package]
+name = "qf_core"
+version = "0.1.0"
+edition = "2021"
+description = "Rust hot paths for qforecast: rolling statistics and cross-sectional ranks"
+
+[lib]
+name = "qforecast_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
+numpy = "0.22"
+rayon = "1.10"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1

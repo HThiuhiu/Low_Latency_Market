@@ -24,6 +24,38 @@ jobs:
       - name: Feature benchmark (smoke)
         run: python benchmarks/bench_features.py
 
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/qf_core
+      - name: Format + clippy
+        working-directory: crates/qf_core
+        run: |
+          cargo fmt --check
+          cargo clippy --release -- -D warnings
+      - name: Build wheel
+        run: |
+          pip install "maturin>=1.5,<2"
+          cd crates/qf_core && maturin build --release
+      - name: Tests with the Rust hot paths (parity + full suite)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-dev.txt
+          pip install crates/qf_core/target/wheels/qforecast_core-*.whl
+          python -c "import qforecast_core as q; print('qforecast_core', q.__version__)"
+          pytest -q tests/test_rust_parity.py
+          pytest -q
+
   docker:
     runs-on: ubuntu-latest
     steps:
